@@ -12,14 +12,15 @@
 3. [Payment Flows & Money Movement](#3-payment-flows--money-movement)
 4. [Scalability & Performance](#4-scalability--performance)
 5. [Reliability & Consistency](#5-reliability--consistency)
-6. [Security & Fraud](#6-security--fraud)
-7. [API Design](#7-api-design)
-8. [Real-Time & Async Processing](#8-real-time--async-processing)
-9. [Settlement & Reconciliation](#9-settlement--reconciliation)
-10. [Mobile & Offline Considerations](#10-mobile--offline-considerations)
-11. [Compliance & Regulatory](#11-compliance--regulatory)
-12. [Operational & Observability](#12-operational--observability)
-13. [Cost & Trade-offs](#13-cost--trade-offs)
+6. [Authentication & Authorization](#6-authentication--authorization)
+7. [Security & Fraud](#7-security--fraud)
+8. [API Design](#8-api-design)
+9. [Real-Time & Async Processing](#9-real-time--async-processing)
+10. [Settlement & Reconciliation](#10-settlement--reconciliation)
+11. [Mobile & Offline Considerations](#11-mobile--offline-considerations)
+12. [Compliance & Regulatory](#12-compliance--regulatory)
+13. [Operational & Observability](#13-operational--observability)
+14. [Cost & Trade-offs](#14-cost--trade-offs)
 
 ---
 
@@ -874,11 +875,1302 @@ If the user only had MMK 5000:
 
 ---
 
-## 6. Security & Fraud
+## 6. Authentication & Authorization
 
 ---
 
-### Q6.1: How would you design the fraud detection system for FDB Pay?
+### Q6.1: Walk me through the full authentication flow for a new FDB Pay user registering on a mobile device in Myanmar. What security considerations are specific to Myanmar?
+
+**Answer:**
+
+**End-to-End Registration & First Login Flow:**
+
+```
+Step 1: User downloads FDB Pay app from Google Play / Huawei AppGallery
+        (iOS App Store has low penetration in Myanmar — most users on Android)
+
+Step 2: App launches -> User taps "Register"
+
+Step 3: User enters Myanmar phone number: +959XXXXXXXXX
+        App validates format: must be 9-10 digits after +959 prefix
+        App checks network connectivity (may be intermittent)
+
+Step 4: App requests OTP
+        POST /auth/otp/send
+        Body: { "phone": "+959123456789" }
+
+Step 5: OTP Service generates 6-digit code
+        - Store in Redis: otp:+959123456789 -> { code: "482917", attempts: 0, expires_at: +3min }
+        - Send via MPT Bulk SMS (primary) or Twilio (fallback)
+        - User receives SMS: "Your FDB Pay verification code is 482917. Valid for 3 minutes."
+
+Step 6: User enters OTP in app
+        POST /auth/otp/verify
+        Body: { "phone": "+959123456789", "code": "482917" }
+
+Step 7: OTP Service validates:
+        - Code matches? Yes
+        - Not expired? Yes (1 min 42 sec elapsed)
+        - Attempts < 3? Yes (first attempt)
+        -> Mark phone as verified
+
+Step 8: App prompts user to set MPIN (4-6 digit numeric PIN)
+        User enters: 1234 (for demo — app encourages stronger PIN)
+        POST /auth/pin/set
+        Body: { "phone": "+959123456789", "pin": "1234" }
+
+Step 9: Auth Service:
+        - Validate PIN complexity (no repeating digits, not sequential)
+        - Hash with bcrypt (cost factor 12): pin_hash = bcrypt("1234")
+        - Store in users table: pin_hash, pin_attempts=0
+
+Step 10: Auth Service creates user record:
+         INSERT INTO users (phone, status, kyc_tier, pin_hash, referral_code)
+         VALUES ('+959123456789', 'ACTIVE', 'BASIC', '$2b$12$...', 'ABCD1234')
+
+Step 11: Auth Service creates wallet:
+         INSERT INTO wallets (user_id, currency, status, balance_total, daily_limit, kyc_tier)
+         VALUES (user_id, 'MMK', 'ACTIVE', 0, 500000, 'BASIC')
+
+Step 12: Auth Service issues JWT:
+         {
+           "sub": "user_id_abc123",
+           "phone": "+959123456789",
+           "kyc_tier": "BASIC",
+           "iat": 1690444200,
+           "exp": 1690445100  // 15 minutes
+         }
+         Sign with RS256 (RSA private key)
+
+Step 13: Store refresh token in Redis:
+         session:user_id_abc123 -> {
+           "access_token": "eyJ...",
+           "refresh_token": "eyJ...",
+           "device_id": "device_xyz",
+           "expires_at": "2026-07-27T10:45:00Z"
+         }
+
+Step 14: App stores tokens securely:
+         - Access token: in-memory only (lost on app kill)
+         - Refresh token: Android Keystore / iOS Keychain
+         - Device fingerprint: hashed device model + IMEI
+
+Step 15: App registers device (trusted device):
+         POST /auth/device/register
+         Body: { "device_fingerprint": "abc123...", "device_name": "Samsung Galaxy A12" }
+         Max 3 trusted devices per user
+
+Step 16: User sees home screen with MMK 0 balance
+```
+
+**Myanmar-Specific Security Considerations:**
+
+| Consideration | Implementation |
+|---------------|---------------|
+| **Phone number format** | All Myanmar numbers are +959XXXXXXXXX (10 digits after +959). Validate strictly — no landline numbers for registration. |
+| **SIM swap risk** | Myanmar has high SIM swap fraud. For transfers > MMK 500,000, require step-up auth (re-enter PIN + OTP). |
+| **Shared devices** | Many families share a single Android phone. Device trust is per-user, not per-device. Allow multiple users on same device but flag when > 2 accounts share a device. |
+| **Low-literacy users** | MPIN is 4 digits (not complex passwords). Biometric (fingerprint) supported on capable devices. USSD fallback for feature phones. |
+| **USSD sessions** | Feature phone users authenticate via USSD: dial *123#, enter phone, enter PIN. Session timeout: 3 minutes. Max 3 PIN attempts per session. |
+| **Offline OTP delivery** | SMS delivery can be delayed in rural areas. OTP validity extended to 5 minutes (vs 3 min standard). Allow voice call OTP as fallback. |
+| **Network interruptions** | App caches last known good JWT. If network drops mid-transaction, app queues the request and sends when connectivity resumes (with idempotency key). |
+
+---
+
+### Q6.2: How does the JWT-based session management work in FDB Pay? Why 15-minute access tokens?
+
+**Answer:**
+
+**JWT Token Architecture:**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    TOKEN LIFECYCLE                                │
+│                                                                  │
+│  Login                                                           │
+│    │                                                             │
+│    v                                                             │
+│  [Access Token]  (15 min, JWT, RS256 signed)                    │
+│    │                                                             │
+│    ├── Used for: API requests (Authorization: Bearer <token>)    │
+│    ├── Contains: user_id, phone, kyc_tier, iat, exp             │
+│    ├── Stateless: any service can validate without DB lookup     │
+│    └── Cannot be revoked before expiry (by design)               │
+│                                                                  │
+│  [Refresh Token]  (7 days, opaque, stored in Redis)              │
+│    │                                                             │
+│    ├── Used for: Getting new access tokens                       │
+│    ├── Stateless: not needed — Redis lookup required             │
+│    ├── CAN be revoked: delete from Redis = instant invalidation  │
+│    └── Rotated on each use: old refresh token invalidated        │
+│                                                                  │
+│  Access Token expires                                            │
+│    │                                                             │
+│    v                                                             │
+│  POST /auth/token/refresh                                        │
+│    │  Body: { "refresh_token": "eyJ..." }                       │
+│    │                                                             │
+│    v                                                             │
+│  Auth Service:                                                   │
+│    1. Look up refresh token in Redis                             │
+│    2. If not found -> expired/revoked -> force re-login          │
+│    3. If found -> issue new access + refresh token pair          │
+│    4. Delete old refresh token from Redis (rotation)             │
+│    5. Store new refresh token in Redis                           │
+│    6. Return new tokens to client                                │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Why 15-Minute Access Tokens?**
+
+| Factor | Reasoning |
+|--------|-----------|
+| **Stolen token window** | If a JWT is intercepted (man-in-the-middle, log leak), it's only valid for 15 minutes. An attacker has a very narrow window. |
+| **No revocation needed** | Since tokens expire quickly, we don't need a token blacklist. If a user logs out, we just delete the refresh token from Redis — the access token expires naturally within 15 min. |
+| **Myanmar network reality** | 15 minutes is long enough that a user on a slow 3G connection in Sagaing won't get logged out mid-transaction, but short enough to limit exposure. |
+| **Refresh overhead** | Refreshing every 15 min is lightweight: one Redis GET + JWT signing (CPU-only, no DB call). |
+| **Mobile battery** | Longer token life means fewer refresh calls, saving battery on low-end Android devices common in Myanmar. |
+
+**Alternative considered:** 5-minute tokens (more secure) rejected because Myanmar's 3G latency (200-500ms) means the refresh round-trip adds noticeable delay on every app open.
+
+---
+
+### Q6.3: How would you implement Role-Based Access Control (RBAC) for FDB Pay's different user types?
+
+**Answer:**
+
+**RBAC Architecture:**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    RBAC ROLE HIERARCHY                            │
+│                                                                  │
+│  ┌──────────┐                                                    │
+│  │ CONSUMER │  Permissions: wallet.read, transfer.initiate,      │
+│  └──────────┘           bill.pay, history.read                  │
+│       │                                                          │
+│  ┌──────────┐                                                    │
+│  │ MERCHANT │  Permissions: consumer.all +                       │
+│  └──────────┘           merchant.qr.generate,                   │
+│                          merchant.transactions.read,             │
+│                          merchant.settlements.read               │
+│       │                                                          │
+│  ┌──────────┐                                                    │
+│  │  AGENT   │  Permissions: consumer.all +                       │
+│  └──────────┘           agent.cashin, agent.cashout,             │
+│                          agent.float.manage                      │
+│       │                                                          │
+│  ┌──────────┐                                                    │
+│  │ CORPORATE│  Permissions: consumer.all +                       │
+│  └──────────┘           corp.bulk_disburse,                      │
+│                          corp.reconciliation.read,               │
+│                          corp.payroll.manage                     │
+│       │                                                          │
+│  ┌──────────┐                                                    │
+│  │  ADMIN   │  Permissions: ALL (with approval workflows)        │
+│  └──────────┘                                                    │
+│       │                                                          │
+│  ┌──────────┐                                                    │
+│  │ SUPER    │  Permissions: system.config, admin.manage          │
+│  │  ADMIN   │  (FDB Bank internal only, max 3 people)           │
+│  └──────────┘                                                    │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Permission Definition:**
+
+```yaml
+# permissions.yml
+roles:
+  CONSUMER:
+    permissions:
+      - wallet.read
+      - wallet.topup
+      - wallet.withdraw
+      - transfer.initiate
+      - transfer.history
+      - bill.pay
+      - bill.history
+      - profile.read
+      - profile.update
+      - kyc.submit
+
+  MERCHANT:
+    inherits: CONSUMER
+    permissions:
+      - merchant.qr.generate
+      - merchant.qr.static
+      - merchant.transactions.read
+      - merchant.settlements.read
+      - merchant.refund.initiate
+      - merchant.staff.manage
+      - merchant.dashboard.read
+
+  AGENT:
+    inherits: CONSUMER
+    permissions:
+      - agent.cashin
+      - agent.cashout
+      - agent.float.read
+      - agent.commission.read
+      - agent.qr.generate
+
+  CORPORATE:
+    inherits: CONSUMER
+    permissions:
+      - corp.bulk_disburse
+      - corp.reconciliation.read
+      - corp.payroll.manage
+      - corp.api.access
+
+  ADMIN:
+    permissions:
+      - admin.dashboard.read
+      - admin.users.read
+      - admin.users.suspend
+      - admin.merchants.read
+      - admin.merchants.approve
+      - admin.kyc.review
+      - admin.disputes.resolve
+      - admin.aml.alerts
+      - admin.config.read
+      - admin.audit.read
+      - admin.reports.generate
+
+  SUPER_ADMIN:
+    inherits: ADMIN
+    permissions:
+      - admin.config.update
+      - admin.admins.manage
+      - system.fee.update
+      - system.limit.update
+```
+
+**JWT Claims with Role & Permissions:**
+
+```json
+{
+  "sub": "user_abc123",
+  "phone": "+959123456789",
+  "role": "MERCHANT",
+  "permissions": [
+    "wallet.read",
+    "transfer.initiate",
+    "merchant.qr.generate",
+    "merchant.transactions.read"
+  ],
+  "kyc_tier": "ENHANCED",
+  "iat": 1690444200,
+  "exp": 1690445100
+}
+```
+
+**API Gateway Permission Check:**
+
+```python
+# API Gateway middleware
+def check_permission(required_permission):
+    def middleware(request):
+        token = extract_jwt(request)
+        if not token:
+            return Error(401, "Authentication required")
+
+        permissions = token.get('permissions', [])
+
+        if required_permission not in permissions:
+            return Error(403, f"Permission denied: {required_permission} required")
+
+        return next(request)
+
+    return middleware
+
+# Route protection examples:
+router.post("/v1/merchant/qr/generate",
+    check_permission("merchant.qr.generate"),
+    merchant_controller.generate_qr)
+
+router.post("/v1/admin/merchants/{id}/status",
+    check_permission("admin.merchants.approve"),
+    admin_controller.update_merchant_status)
+
+router.post("/v1/corp/bulk-disburse",
+    check_permission("corp.bulk_disburse"),
+    corporate_controller.bulk_disburse)
+```
+
+**Real-World Scenario:**
+A merchant's staff member logs into the merchant app. Their JWT has `role: "MERCHANT_STAFF"` with limited permissions: they can process QR payments but cannot view settlement reports or initiate refunds. When they try to access `/v1/merchant/settlements`, the API Gateway returns `403 Forbidden: settlement.read permission required`. The merchant owner, with full `MERCHANT` role, can access settlements.
+
+---
+
+### Q6.4: How do you handle authentication across FDB Pay's multiple channels (app, USSD, web, POS)? Is it the same everywhere?
+
+**Answer:**
+
+**Multi-Channel Authentication Architecture:**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│              CHANNEL-SPECIFIC AUTHENTICATION                      │
+│                                                                  │
+│  ┌──────────┐  Auth: Phone + MPIN + Device Fingerprint          │
+│  │ Mobile   │  Token: JWT (access + refresh)                    │
+│  │ App      │  Storage: Android Keystore / iOS Keychain         │
+│  │          │  Biometric: Fingerprint/Face (optional)           │
+│  └──────────┘                                                    │
+│                                                                  │
+│  ┌──────────┐  Auth: Phone + MPIN                               │
+│  │   USSD   │  Token: Session ID (Redis, 3-min TTL)            │
+│  │ Gateway  │  No persistent tokens — session-based             │
+│  │          │  Each USSD menu = new request with session ID     │
+│  └──────────┘                                                    │
+│                                                                  │
+│  ┌──────────┐  Auth: Email/Phone + Password (or SSO)            │
+│  │   Web    │  Token: JWT (access + refresh)                    │
+│  │ Portal   │  + CSRF token for state-changing operations       │
+│  │          │  PKCE: For OAuth2 auth code flow (if applicable)  │
+│  └──────────┘                                                    │
+│                                                                  │
+│  ┌──────────┐  Auth: Device certificate + Merchant PIN           │
+│  │   POS    │  Token: Device JWT (long-lived, 30 days)          │
+│  │Terminal  │  Auto-authenticated (no user interaction)         │
+│  │          │  Audio confirmation (sound-box)                   │
+│  └──────────┘                                                    │
+│                                                                  │
+│  ┌──────────┐  Auth: API Key + Secret (client_credentials)      │
+│  │Corporate │  Token: OAuth2 access token (1 hour)              │
+│  │  API     │  No refresh token (re-authenticate with creds)    │
+│  │          │  IP whitelist for additional security              │
+│  └──────────┘                                                    │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Channel-Specific Details:**
+
+| Channel | Auth Method | Token Type | Session Duration | PIN/Password |
+|---------|------------|------------|-----------------|--------------|
+| Mobile App | Phone + MPIN | JWT | 15 min access, 7-day refresh | 4-6 digit MPIN |
+| Mobile App (biometric) | Phone + Fingerprint | JWT | 15 min access, 7-day refresh | Biometric (replaces MPIN for login) |
+| USSD | Phone + MPIN | Session ID | 3 minutes | 4-digit PIN |
+| Web Portal | Email + Password | JWT | 15 min access, 7-day refresh | Complex password |
+| POS Terminal | Device cert | Device JWT | 30 days | Device auto-auth |
+| Corporate API | API Key + Secret | OAuth2 token | 1 hour | API secret |
+
+**USSD Authentication Flow (Unique):**
+
+```
+User dials *123#
+    |
+    v
+USSD Gateway: Check if session exists for this phone number
+    |
+    +-- New session:
+    |   "Welcome to FDB Pay. Enter your PIN:"
+    |   User enters: ****
+    |   Auth Service validates PIN
+    |   Create session in Redis: session:{phone} -> { user_id, created_at }
+    |   TTL: 180 seconds (3 minutes)
+    |
+    +-- Existing session:
+        Check Redis TTL
+            +-- If valid: Process menu navigation
+            +-- If expired: "Session expired. Please dial *123# again."
+```
+
+**POS Terminal Authentication:**
+
+```python
+# POS device authentication during setup
+def register_pos_device(device_id, merchant_id, device_certificate):
+    # 1. Validate device certificate (issued by FDB Pay)
+    if not validate_certificate(device_certificate):
+        return Error("Invalid device certificate")
+
+    # 2. Link device to merchant
+    db.insert("pos_devices", {
+        "device_id": device_id,
+        "merchant_id": merchant_id,
+        "status": "ACTIVE",
+        "last_heartbeat": datetime.now()
+    })
+
+    # 3. Issue long-lived device JWT
+    token = jwt.encode({
+        "device_id": device_id,
+        "merchant_id": merchant_id,
+        "type": "DEVICE",
+        "iat": datetime.now(),
+        "exp": datetime.now() + timedelta(days=30)
+    }, private_key, algorithm="RS256")
+
+    return Success(device_token=token)
+```
+
+**Real-World Scenario:**
+A tea shop owner in Mandalay uses all channels:
+- **Morning:** Opens FDB Pay app on phone (biometric login) to check yesterday's settlements
+- **During the day:** Staff uses POS terminal (auto-authenticated device) to accept QR payments
+- **Evening:** Owner dials *123# on feature phone (USSD, PIN auth) to check balance
+- **Monthly:** Owner logs into web portal (email + password) to download tax reports
+
+Each channel authenticates independently but shares the same wallet and user identity.
+
+---
+
+### Q6.5: How do you handle password/PIN reset securely? What if someone's phone is stolen?
+
+**Answer:**
+
+**PIN Reset Flow (Mobile App):**
+
+```
+Step 1: User taps "Forgot PIN?" on login screen
+
+Step 2: App sends OTP to registered phone number
+        POST /auth/otp/send
+        Body: { "phone": "+959123456789", "purpose": "pin_reset" }
+
+Step 3: User receives SMS: "Your FDB Pay PIN reset code is 739201"
+
+Step 4: User enters OTP in app
+        POST /auth/otp/verify
+        Body: { "phone": "+959123456789", "code": "739201", "purpose": "pin_reset" }
+
+Step 5: OTP validated -> App shows "Set new PIN" screen
+
+Step 6: User enters new PIN (twice for confirmation)
+        POST /auth/pin/reset
+        Body: { "phone": "+959123456789", "otp_token": "verified_token_xyz", "new_pin": "5678" }
+
+Step 7: Auth Service:
+        - Validate OTP token is verified and not expired
+        - Hash new PIN: bcrypt("5678")
+        - Update users table: pin_hash = new_hash, pin_attempts = 0
+        - Invalidate all existing sessions (force re-login on all devices)
+        - Log audit event: PIN_RESET
+
+Step 8: Response: "PIN reset successful. Please login with your new PIN."
+
+Step 9: All existing JWTs become invalid:
+        - Delete all refresh tokens for this user from Redis
+        - Access tokens expire naturally within 15 minutes
+        - User must re-authenticate on all devices
+```
+
+**Stolen Phone Scenario:**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│              STOLEN PHONE RESPONSE PLAN                          │
+│                                                                  │
+│  Scenario: User's phone is stolen in a Yangon market             │
+│                                                                  │
+│  Immediate Actions (User):                                       │
+│  1. Call FDB Pay hotline: 01-XXXXXXX                             │
+│  2. Provide: phone number + NRC number for identity verification │
+│  3. Request: account freeze                                       │
+│                                                                  │
+│  System Response:                                                │
+│  1. Admin freezes user account:                                  │
+│     UPDATE users SET status = 'FROZEN' WHERE phone = '+959...';  │
+│                                                                  │
+│  2. All sessions invalidated:                                    │
+│     DELETE FROM redis WHERE key LIKE 'session:user_abc%';        │
+│                                                                  │
+│  3. Wallet frozen (no transactions possible):                    │
+│     UPDATE wallets SET status = 'FROZEN' WHERE user_id = 'abc';  │
+│                                                                  │
+│  4. If device reported stolen, POS devices flagged:              │
+│     UPDATE pos_devices SET status = 'BLOCKED'                   │
+│     WHERE merchant_id IN (SELECT merchant_id FROM ...);          │
+│                                                                  │
+│  Security Measures (Already in place):                           │
+│  - App requires MPIN for every transaction (not just login)     │
+│  - Biometric login doesn't bypass transaction PIN               │
+│  - After 5 failed PIN attempts: 30-minute lockout               │
+│  - After 3 lockouts: account auto-freeze                        │
+│  - Device fingerprinting: stolen device flagged in system       │
+│  - Transaction alerts: every transaction sends SMS notification │
+│                                                                  │
+│  Recovery:                                                       │
+│  1. User visits FDB branch with NRC                             │
+│  2. Identity verified in-person                                  │
+│  3. Account unfrozen                                             │
+│  4. New PIN set at branch (or via OTP on new SIM)               │
+│  5. All previous devices de-registered                           │
+│  6. User re-registers on new device                             │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**PIN Security Controls:**
+
+```python
+class PinSecurity:
+    MAX_ATTEMPTS = 5
+    LOCKOUT_DURATION = timedelta(minutes=30)
+    MAX_LOCKOUTS = 3
+    ACCOUNT_FREEZE_AFTER = 3
+
+    def validate_pin(self, user, submitted_pin):
+        # Check if account is locked
+        if user.pin_locked_until and user.pin_locked_until > datetime.now():
+            remaining = user.pin_locked_until - datetime.now()
+            return Error(f"Account locked. Try again in {remaining.seconds // 60} minutes.")
+
+        # Hash and compare
+        if not bcrypt.checkpw(submitted_pin.encode(), user.pin_hash.encode()):
+            # Increment attempts
+            attempts = user.pin_attempts + 1
+
+            if attempts >= self.MAX_ATTEMPTS:
+                # Lock the account
+                user.pin_locked_until = datetime.now() + self.LOCKOUT_DURATION
+                user.pin_attempts = 0
+
+                # Track lockout count
+                lockout_count = redis.incr(f"pin_lockouts:{user.id}")
+                redis.expire(f"pin_lockouts:{user.id}", 86400)  # 24h window
+
+                if lockout_count >= self.MAX_LOCKOUTS:
+                    # Freeze account entirely
+                    self.freeze_account(user, reason="Multiple PIN lockouts - possible theft")
+                    return Error("Account frozen for security. Please contact support.")
+
+                return Error(f"Too many attempts. Account locked for {self.LOCKOUT_DURATION.seconds // 60} minutes.")
+
+            user.pin_attempts = attempts
+            user.save()
+            return Error(f"Incorrect PIN. {self.MAX_ATTEMPTS - attempts} attempts remaining.")
+
+        # PIN correct
+        user.pin_attempts = 0
+        user.pin_locked_until = None
+        user.save()
+        return Success()
+
+    def freeze_account(self, user, reason):
+        user.status = 'FROZEN'
+        user.save()
+
+        # Freeze wallet
+        wallet = db.query("SELECT id FROM wallets WHERE user_id = %s", user.id)
+        db.execute("UPDATE wallets SET status = 'FROZEN' WHERE id = %s", wallet.id)
+
+        # Invalidate all sessions
+        redis.delete_pattern(f"session:{user.id}:*")
+
+        # Log audit
+        db.insert("audit_log", {
+            "actor_id": "SYSTEM",
+            "actor_type": "SYSTEM",
+            "action": "ACCOUNT_FROZEN",
+            "resource_type": "USER",
+            "resource_id": user.id,
+            "details": {"reason": reason}
+        })
+
+        # Notify user via SMS (if SIM still active)
+        sms_service.send(user.phone, "FDB Pay: Your account has been frozen for security. Please visit your nearest FDB branch.")
+
+        # Alert compliance team
+        kafka_publish("security.account_frozen", {
+            "user_id": user.id,
+            "reason": reason,
+            "timestamp": datetime.now().isoformat()
+        })
+```
+
+---
+
+### Q6.6: How would you design the OAuth2 flow for FDB Pay's corporate API clients?
+
+**Answer:**
+
+**Corporate API Authentication (OAuth2 Client Credentials):**
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Corporate   │     │  FDB Pay     │     │  FDB Pay     │
+│  ERP System  │     │  Token       │     │  API Gateway │
+│              │     │  Service     │     │              │
+└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
+       │                    │                    │
+       │ 1. POST /oauth/token                   │
+       │ Body: {                                │
+       │   "grant_type": "client_credentials",  │
+       │   "client_id": "corp_abc123",          │
+       │   "client_secret": "secret_xyz...",    │
+       │   "scope": "bulk_disburse reconcile"   │
+       │ }                                      │
+       │───────────────────▶│                    │
+       │                    │                    │
+       │                    │ 2. Validate:       │
+       │                    │ - client_id exists │
+       │                    │ - secret matches   │
+       │                    │ - IP whitelisted   │
+       │                    │ - scope allowed    │
+       │                    │                    │
+       │ 3. Token Response  │                    │
+       │ {                  │                    │
+       │   "access_token":  │                    │
+       │     "eyJhbG...",   │                    │
+       │   "token_type":    │                    │
+       │     "Bearer",      │                    │
+       │   "expires_in":    │                    │
+       │     3600,          │                    │
+       │   "scope":         │                    │
+       │     "bulk_disburse │                    │
+       │      reconcile"    │                    │
+       │ }                  │                    │
+       │◀───────────────────│                    │
+       │                    │                    │
+       │ 4. API Request     │                    │
+       │ Authorization:     │                    │
+       │   Bearer eyJhbG... │                    │
+       │───────────────────────────────────────▶│
+       │                    │                    │
+       │                    │ 5. Validate JWT:   │
+       │                    │ - Signature valid  │
+       │                    │ - Not expired      │
+       │                    │ - Scope includes   │
+       │                    │   "bulk_disburse"  │
+       │                    │ - IP matches       │
+       │                    │                    │
+       │ 6. API Response    │                    │
+       │◀───────────────────────────────────────│
+```
+
+**Token Service Implementation:**
+
+```python
+class TokenService:
+    def create_client_credentials_token(self, client_id, client_secret, scope, request_ip):
+        # 1. Validate client
+        client = db.query("SELECT * FROM api_clients WHERE client_id = %s", client_id)
+        if not client:
+            raise AuthError("Invalid client_id")
+
+        if not bcrypt.checkpw(client_secret.encode(), client.secret_hash.encode()):
+            raise AuthError("Invalid client_secret")
+
+        # 2. IP whitelist check
+        if client.allowed_ips and request_ip not in client.allowed_ips:
+            raise AuthError(f"IP {request_ip} not authorized for this client")
+
+        # 3. Scope validation
+        requested_scopes = set(scope.split(" "))
+        allowed_scopes = set(client.allowed_scopes)
+        if not requested_scopes.issubset(allowed_scopes):
+            denied = requested_scopes - allowed_scopes
+            raise AuthError(f"Scope not allowed: {denied}")
+
+        # 4. Generate token
+        token = jwt.encode({
+            "sub": client_id,
+            "type": "CLIENT_CREDENTIALS",
+            "scope": scope,
+            "iat": datetime.utcnow(),
+            "exp": datetime.utcnow() + timedelta(hours=1)
+        }, private_key, algorithm="RS256")
+
+        # 5. Log token creation
+        db.insert("api_tokens", {
+            "client_id": client_id,
+            "scope": scope,
+            "ip": request_ip,
+            "created_at": datetime.utcnow()
+        })
+
+        return {
+            "access_token": token,
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": scope
+        }
+```
+
+**Corporate API Usage Example:**
+
+```bash
+# Step 1: Get access token
+curl -X POST https://api.fdbpay.com.mm/v1/oauth/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "grant_type": "client_credentials",
+    "client_id": "corp_myabank_001",
+    "client_secret": "sk_live_abc123xyz789...",
+    "scope": "bulk_disburse reconcile"
+  }'
+
+# Response:
+# { "access_token": "eyJhbG...", "expires_in": 3600 }
+
+# Step 2: Use token for bulk disbursement
+curl -X POST https://api.fdbpay.com.mm/v1/corp/bulk-disburse \
+  -H "Authorization: Bearer eyJhbG..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "disbursements": [
+      {"phone": "+959123456789", "amount": 500000, "reference": "SALARY-JUL"},
+      {"phone": "+959987654321", "amount": 750000, "reference": "SALARY-JUL"}
+    ]
+  }'
+```
+
+---
+
+### Q6.7: How do you handle session management across multiple devices? What happens when a user logs in on a new device?
+
+**Answer:**
+
+**Multi-Device Session Architecture:**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│              MULTI-DEVICE SESSION MANAGEMENT                     │
+│                                                                  │
+│  Redis Structure:                                                │
+│  session:{user_id}:{device_id} -> {                             │
+│    "access_token": "eyJ...",                                     │
+│    "refresh_token": "eyJ...",                                    │
+│    "device_info": {                                              │
+│      "fingerprint": "abc123...",                                 │
+│      "name": "Samsung Galaxy A12",                               │
+│      "os": "Android 12",                                         │
+│      "ip": "103.25.xx.xx"                                        │
+│    },                                                            │
+│    "created_at": "2026-07-27T10:30:00Z",                        │
+│    "last_active": "2026-07-27T10:45:00Z",                       │
+│    "expires_at": "2026-08-03T10:30:00Z"                         │
+│  }                                                               │
+│                                                                  │
+│  Limits: Max 3 devices per user                                  │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Device Registration Flow:**
+
+```python
+class DeviceManager:
+    MAX_DEVICES = 3
+
+    def register_device(self, user_id, device_fingerprint, device_name, device_os):
+        # 1. Count existing devices
+        existing_devices = redis.keys(f"session:{user_id}:*")
+
+        if len(existing_devices) >= self.MAX_DEVICES:
+            # 2a. Find least recently active device
+            oldest_device = self.find_oldest_device(user_id)
+
+            # 2b. Notify user about removal
+            sms_service.send(user.device_phone,
+                f"FDB Pay: New login detected on {device_name}. "
+                f"Old device {oldest_device.name} has been removed. "
+                f"If this wasn't you, call 01-XXXXXXX immediately.")
+
+            # 2c. Remove oldest device session
+            redis.delete(f"session:{user_id}:{oldest_device.id}")
+
+        # 3. Create new device session
+        device_id = str(uuid.uuid4())
+        session_key = f"session:{user_id}:{device_id}"
+
+        redis.set(session_key, json.dumps({
+            "device_fingerprint": device_fingerprint,
+            "device_name": device_name,
+            "device_os": device_os,
+            "created_at": datetime.utcnow().isoformat(),
+            "last_active": datetime.utcnow().isoformat(),
+            "expires_at": (datetime.utcnow() + timedelta(days=7)).isoformat()
+        }), ex=604800)  # 7 days
+
+        # 4. Log audit
+        db.insert("audit_log", {
+            "actor_id": user_id,
+            "action": "DEVICE_REGISTERED",
+            "resource_type": "DEVICE",
+            "resource_id": device_id,
+            "details": {"device_name": device_name, "device_os": device_os}
+        })
+
+        return Success(device_id=device_id)
+
+    def find_oldest_device(self, user_id):
+        devices = redis.keys(f"session:{user_id}:*")
+        oldest = None
+        for device_key in devices:
+            device = json.loads(redis.get(device_key))
+            if not oldest or device['last_active'] < oldest['last_active']:
+                oldest = device
+        return oldest
+```
+
+**What Happens on New Device Login:**
+
+```
+Scenario: User has 3 devices registered. Logs in on a 4th device.
+
+1. User enters phone + PIN on new device
+
+2. Auth Service validates credentials:
+   - Phone exists? Yes
+   - PIN correct? Yes
+   - Account not frozen? Yes
+
+3. Device Manager checks existing devices:
+   - Count: 3 devices (max = 3)
+   - Need to remove oldest
+
+4. System actions:
+   a. Remove oldest device session from Redis
+   b. Create new device session in Redis
+   c. Send SMS to user's phone:
+      "FDB Pay: New login on iPhone 14. Old device 'Samsung Galaxy A12' removed.
+       If this wasn't you, call 01-XXXXXXX."
+   d. Send push notification to all remaining devices:
+      "New login detected on iPhone 14. Tap to review devices."
+
+5. User receives new JWT tokens
+6. New device is now active
+```
+
+**Session Revocation (User-Initiated):**
+
+```python
+# User taps "Log out all devices" in app
+def logout_all_devices(user_id):
+    # Delete all device sessions
+    devices = redis.keys(f"session:{user_id}:*")
+    for device_key in devices:
+        redis.delete(device_key)
+
+    # Log audit
+    db.insert("audit_log", {
+        "actor_id": user_id,
+        "action": "ALL_SESSIONS_REVOKED",
+        "resource_type": "USER",
+        "resource_id": user_id
+    })
+
+    # Notify user
+    sms_service.send(user.phone, "FDB Pay: All devices logged out successfully.")
+
+    return Success("All sessions revoked")
+```
+
+**Real-World Scenario:**
+A merchant in Yangon has:
+- **Device 1:** Personal phone (Samsung) — logged in for 5 days
+- **Device 2:** Work phone (iPhone) — logged in for 3 days
+- **Device 3:** Tablet at shop — logged in for 1 day
+
+Merchant buys a new phone (4th device). When they log in:
+1. The tablet (oldest active device) is automatically logged out
+2. Merchant receives SMS: "New login on new device. Old device 'Tablet' removed."
+3. If the merchant didn't do this (someone stole their credentials), they call the hotline immediately
+4. Support team freezes the account, investigates the IP/device of the unauthorized login
+
+---
+
+### Q6.8: How would you handle SSO (Single Sign-On) for FDB Pay's admin portal and internal tools?
+
+**Answer:**
+
+**SSO Architecture for FDB Bank Employees:**
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  FDB Bank    │     │  FDB Pay     │     │  FDB Pay     │
+│  Employee    │     │  Identity    │     │  Admin       │
+│  (Browser)   │     │  Provider    │     │  Portal      │
+└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
+       │                    │                    │
+       │ 1. Access admin.fdbpay.com.mm          │
+       │───────────────────────────────────────▶│
+       │                    │                    │
+       │ 2. Redirect to IdP                     │
+       │    (SAML/OIDC)                         │
+       │◀───────────────────────────────────────│
+       │                    │                    │
+       │ 3. Employee authenticates              │
+       │    via FDB Bank SSO (Active Directory) │
+       │───────────────────▶│                    │
+       │                    │                    │
+       │ 4. SAML assertion / OIDC token         │
+       │    with employee role & permissions    │
+       │◀───────────────────│                    │
+       │                    │                    │
+       │ 5. Redirect back to admin portal       │
+       │    with SAML/OIDC token               │
+       │───────────────────────────────────────▶│
+       │                    │                    │
+       │                    │ 6. Validate token │
+       │                    │    Map to FDB Pay │
+       │                    │    admin role     │
+       │                    │                    │
+       │ 7. Admin session created               │
+       │    (JWT issued)                        │
+       │◀───────────────────────────────────────│
+```
+
+**Employee-to-Role Mapping:**
+
+```python
+# SAML/OIDC attribute mapping
+SSO_ROLE_MAPPING = {
+    "FDB_IT_ADMIN": "SUPER_ADMIN",
+    "FDB_COMPLIANCE_OFFICER": "ADMIN",  # Limited to AML/KYC functions
+    "FDB_OPERATIONS": "ADMIN",          # Limited to operations functions
+    "FDB_MERCHANT_OPS": "ADMIN",        # Limited to merchant management
+    "FDB_CUSTOMER_SUPPORT": "ADMIN",    # Limited to dispute resolution
+    "FDB_FINANCE": "ADMIN",             # Limited to reporting/settlement
+}
+
+def process_sso_callback(saml_assertion):
+    employee_id = saml_assertion['employee_id']
+    employee_name = saml_assertion['name']
+    sso_role = saml_assertion['role']
+    department = saml_assertion['department']
+
+    # Map SSO role to FDB Pay admin role
+    fdb_role = SSO_ROLE_MAPPING.get(sso_role)
+    if not fdb_role:
+        raise AuthError(f"Unauthorized role: {sso_role}")
+
+    # Map department to permissions
+    permissions = DEPARTMENT_PERMISSIONS.get(department, [])
+
+    # Create admin user if not exists
+    admin = db.upsert("admin_users", {
+        "employee_id": employee_id,
+        "name": employee_name,
+        "sso_role": sso_role,
+        "fdb_role": fdb_role,
+        "permissions": permissions,
+        "last_sso_login": datetime.utcnow()
+    })
+
+    # Issue FDB Pay JWT
+    token = jwt.encode({
+        "sub": admin.id,
+        "type": "ADMIN",
+        "role": fdb_role,
+        "permissions": permissions,
+        "employee_id": employee_id,
+        "iat": datetime.utcnow(),
+        "exp": datetime.utcnow() + timedelta(hours=8)  # Work day
+    }, private_key, algorithm="RS256")
+
+    return Success(token=token)
+```
+
+**Multi-Factor Authentication for Admin:**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│              ADMIN MFA FLOW                                       │
+│                                                                  │
+│  Step 1: Employee SSO login (username + password + AD token)    │
+│                                                                  │
+│  Step 2: FDB Pay requires additional MFA for admin actions:     │
+│          - Transaction monitoring dashboard                      │
+│          - Account suspension                                    │
+│          - KYC approval                                          │
+│          - System configuration changes                          │
+│                                                                  │
+│  Step 3: MFA options:                                            │
+│          a. TOTP (Google Authenticator / Authy)                  │
+│          b. Hardware token (YubiKey)                             │
+│          c. SMS OTP (fallback only)                              │
+│                                                                  │
+│  Step 4: Admin enters MFA code                                   │
+│                                                                  │
+│  Step 5: Access granted for this session                         │
+│          (re-authentication required for sensitive operations)   │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+```python
+# MFA middleware for sensitive admin operations
+def require_mfa(operation):
+    def middleware(request):
+        admin = request.admin
+
+        # Check if MFA is required for this operation
+        if operation in SENSITIVE_OPERATIONS:
+            mfa_verified = redis.get(f"mfa_verified:{admin.id}")
+            if not mfa_verified:
+                return Error(403, "MFA verification required for this operation")
+
+        return next(request)
+
+    return middleware
+
+SENSITIVE_OPERATIONS = [
+    "admin.users.suspend",
+    "admin.merchants.approve",
+    "admin.kyc.review",
+    "admin.config.update",
+    "admin.aml.action",
+    "admin.disputes.resolve",
+]
+
+# MFA verification endpoint
+def verify_mfa(admin_id, mfa_code, mfa_type):
+    if mfa_type == "TOTP":
+        totp_secret = db.query("SELECT totp_secret FROM admin_users WHERE id = %s", admin_id)
+        if pyotp.TOTP(totp_secret).verify(mfa_code):
+            redis.set(f"mfa_verified:{admin_id}", "true", ex=3600)  # 1 hour
+            return Success("MFA verified")
+    elif mfa_type == "SMS":
+        # Send OTP and verify (same as user OTP flow)
+        pass
+    elif mfa_type == "HARDWARE":
+        # YubiKey validation
+        pass
+
+    return Error("Invalid MFA code")
+```
+
+---
+
+### Q6.9: How do you secure inter-service authentication within FDB Pay's microservices architecture?
+
+**Answer:**
+
+**Internal Service Authentication:**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│              INTER-SERVICE AUTHENTICATION                         │
+│                                                                  │
+│  Method: mTLS (mutual TLS) + Service JWT                        │
+│                                                                  │
+│  ┌──────────┐    mTLS    ┌──────────┐    mTLS    ┌──────────┐  │
+│  │ Transfer │◄──────────▶│  Wallet  │◄──────────▶│ Merchant │  │
+│  │ Service  │            │ Service  │            │ Service  │  │
+│  └──────────┘            └──────────┘            └──────────┘  │
+│       │                       │                       │         │
+│       │    Service JWT        │    Service JWT        │         │
+│       │    (signed by         │    (signed by         │         │
+│       │     internal CA)      │     internal CA)      │         │
+│       │                       │                       │         │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              Kubernetes Service Mesh (Istio)              │   │
+│  │  - Automatic mTLS between all services                   │   │
+│  │  - Certificate rotation every 24 hours                   │   │
+│  │  - Service identity verified via SPIFFE                  │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Service-to-Service Call:**
+
+```python
+class InternalAuthMiddleware:
+    def __init__(self):
+        self.ca_cert = load_certificate("/certs/internal-ca.pem")
+
+    def validate_service_request(self, request):
+        # 1. Validate mTLS certificate
+        client_cert = request.headers.get("x-forwarded-client-cert")
+        if not verify_certificate(client_cert, self.ca_cert):
+            return Error(403, "Invalid service certificate")
+
+        # 2. Extract service identity
+        service_id = extract_service_id(client_cert)
+
+        # 3. Validate service is authorized for this operation
+        if not is_service_authorized(service_id, request.path):
+            return Error(403, f"Service {service_id} not authorized for {request.path}")
+
+        # 4. Validate request freshness (prevent replay)
+        timestamp = request.headers.get("x-request-timestamp")
+        if abs(datetime.utcnow() - parse_timestamp(timestamp)) > timedelta(seconds=30):
+            return Error(401, "Request expired")
+
+        return next(request)
+
+# Service authorization matrix
+SERVICE_PERMISSIONS = {
+    "transfer-service": [
+        "wallet.debit",
+        "wallet.credit",
+        "wallet.balance.read",
+        "merchant.lookup",
+        "fraud.check",
+        "notification.send"
+    ],
+    "merchant-service": [
+        "wallet.balance.read",
+        "merchant.lookup",
+        "merchant.update",
+        "settlement.create"
+    ],
+    "notification-service": [
+        "notification.send",
+        "user.lookup",
+        "merchant.lookup"
+    ],
+    "settlement-service": [
+        "merchant.lookup",
+        "transaction.aggregate",
+        "settlement.create",
+        "cbs.credit"
+    ]
+}
+```
+
+**Why Not Just Use JWT from External Clients?**
+
+| Concern | External JWT | Internal Service Auth |
+|---------|-------------|---------------------|
+| **Who issues** | FDB Pay Auth Service | Kubernetes / Istio (infrastructure) |
+| **Scope** | User-level permissions | Service-level permissions |
+| **Lifetime** | 15 minutes | 24 hours (auto-rotated) |
+| **Validation** | API Gateway validates | Each service validates via mTLS |
+| **Network** | External (internet) | Internal (VPC, K8s network) |
+
+**Real-World Scenario:**
+The Transfer Service calls the Wallet Service to debit a user. The request includes:
+1. **mTLS certificate** proving it's the Transfer Service (not a rogue pod)
+2. **x-request-timestamp** to prevent replay attacks
+3. **x-correlation-id** for distributed tracing
+
+The Wallet Service validates the certificate, checks that Transfer Service is authorized for `wallet.debit`, processes the debit, and returns the result. No user JWT is needed for this internal call — the service identity is sufficient.
+
+---
+
+### Q6.10: How would you handle API key management for third-party developers who want to integrate with FDB Pay?
+
+**Answer:**
+
+**API Key Lifecycle:**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│              API KEY MANAGEMENT                                   │
+│                                                                  │
+│  1. Application                                                  │
+│     Developer applies via developer.fdbpay.com.mm               │
+│     Provides: business info, use case, expected volume           │
+│                                                                  │
+│  2. Approval                                                     │
+│     FDB Pay team reviews application                             │
+│     Approves/denies with specific scope limitations              │
+│                                                                  │
+│  3. Key Generation                                               │
+│     System generates:                                             │
+│     - api_key: "fak_live_abc123..." (public, can be in code)    │
+│     - api_secret: "sk_live_xyz789..." (private, never in code)  │
+│     - HMAC signing key for request signing                       │
+│                                                                  │
+│  4. Sandbox Access                                               │
+│     Developer gets sandbox keys first:                           │
+│     - api_key: "fak_test_def456..."                             │
+│     - api_secret: "sk_test_uvw012..."                           │
+│     - Test against sandbox environment                           │
+│                                                                  │
+│  5. Production Access                                            │
+│     After sandbox testing + compliance review:                   │
+│     - Production keys issued                                     │
+│     - IP whitelist configured                                    │
+│     - Rate limits set per agreement                              │
+│                                                                  │
+│  6. Key Rotation                                                 │
+│     - Keys expire after 90 days (configurable)                  │
+│     - Developer notified 14 days before expiry                  │
+│     - Old key works for 7 days after new key created            │
+│     - Emergency rotation: immediate, old key invalidated        │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Request Signing (HMAC):**
+
+```python
+# Developer signs requests
+import hmac
+import hashlib
+import time
+
+def sign_request(api_secret, method, path, body, timestamp):
+    # Create signature payload
+    payload = f"{method}\n{path}\n{body}\n{timestamp}"
+    signature = hmac.new(
+        api_secret.encode(),
+        payload.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    return signature
+
+# Developer's HTTP request:
+# POST https://api.fdbpay.com.mm/v1/transfer
+# Headers:
+#   X-API-Key: fak_live_abc123...
+#   X-Timestamp: 1690444200
+#   X-Signature: a1b2c3d4e5f6...
+#   Content-Type: application/json
+# Body: { "recipient": "+95987654321", "amount": 50000 }
+```
+
+**API Gateway Validation:**
+
+```python
+def validate_api_key(request):
+    api_key = request.headers.get("X-API-Key")
+    timestamp = request.headers.get("X-Timestamp")
+    signature = request.headers.get("X-Signature")
+
+    # 1. Look up API key
+    key_record = db.query("SELECT * FROM api_keys WHERE key = %s AND status = 'ACTIVE'", api_key)
+    if not key_record:
+        return Error(401, "Invalid API key")
+
+    # 2. Check expiry
+    if key_record.expires_at < datetime.utcnow():
+        return Error(401, "API key expired. Please rotate your key.")
+
+    # 3. Validate timestamp (prevent replay)
+    if abs(datetime.utcnow() - datetime.utcfromtimestamp(int(timestamp))) > timedelta(minutes=5):
+        return Error(401, "Request timestamp expired")
+
+    # 4. Verify HMAC signature
+    expected_signature = hmac.new(
+        key_record.secret_hash.encode(),
+        f"{request.method}\n{request.path}\n{request.body}\n{timestamp}".encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(signature, expected_signature):
+        return Error(401, "Invalid signature")
+
+    # 5. Check rate limit
+    rate_key = f"api_rl:{api_key}:{int(time.time()) // 60}"
+    count = redis.incr(rate_key)
+    redis.expire(rate_key, 60)
+    if count > key_record.rate_limit:
+        return Error(429, "Rate limit exceeded")
+
+    # 6. Check scope
+    if request.path not in key_record.allowed_endpoints:
+        return Error(403, "Endpoint not allowed for this API key")
+
+    return next(request)
+```
+
+---
+
+*This section covers the core authentication and authorization patterns for FDB Pay, from consumer mobile app login to enterprise API access, with specific attention to Myanmar's unique requirements (shared devices, SIM swaps, low connectivity, multi-channel access).*
+
+
+### Q7.1: How would you design the fraud detection system for FDB Pay?
 
 **Answer:**
 
@@ -952,7 +2244,7 @@ def check_velocity(user_id, amount):
 
 ---
 
-### Q6.2: How would you implement the tiered KYC system for FDB Pay?
+### Q7.2: How would you implement the tiered KYC system for FDB Pay?
 
 **Answer:**
 
@@ -1059,11 +2351,178 @@ def upgrade_to_full(user_id, branch_id, verifier_id):
 
 ---
 
-## 7. API Design
+## 7. Security & Fraud
 
 ---
 
-### Q7.1: How would you design the API for FDB Pay's P2P transfer?
+### Q7.1: How would you design the fraud detection system for FDB Pay?
+
+**Answer:**
+
+**Multi-Layer Fraud Architecture:**
+
+```
+Layer 1: Pre-Authorization (Real-Time, < 50ms)
+  - Velocity checks (Redis counters)
+  - Device fingerprint matching
+  - Geo-location anomaly
+  - Amount limits per KYC tier
+
+Layer 2: Real-Time ML (Real-Time, < 100ms)
+  - Anomaly detection model
+  - Transaction pattern analysis
+  - Network graph analysis
+
+Layer 3: Post-Authorization (Batch, hourly)
+  - Behavioral analysis
+  - Cross-account pattern detection
+  - Velocity aggregation across time windows
+
+Layer 4: Compliance (Continuous)
+  - Sanctions screening
+  - PEP checks
+  - STR generation
+```
+
+**Velocity Check Implementation:**
+
+```python
+def check_velocity(user_id, amount):
+    # Check multiple time windows
+    windows = [
+        ('1min', 60, 5),       # Max 5 transactions per minute
+        ('1hour', 3600, 20),    # Max 20 per hour
+        ('1day', 86400, 50),    # Max 50 per day
+    ]
+
+    for window_name, seconds, max_count in windows:
+        key = f"velocity:{user_id}:{window_name}"
+        current = redis.incr(key)
+        redis.expire(key, seconds)
+
+        if current > max_count:
+            fraud_service.flag(user_id, f"Velocity exceeded: {current} in {window_name}")
+            return BLOCKED
+
+    # Check cumulative amount
+    daily_amount_key = f"daily_amount:{user_id}"
+    daily_total = redis.incrby(daily_amount_key, amount)
+    redis.expire(daily_amount_key, 86400)
+
+    if daily_total > get_daily_limit(user_id):
+        return STEP_UP_AUTH
+
+    return ALLOWED
+```
+
+**ML Model Features:**
+
+| Feature | Description | Example |
+|---------|-------------|---------|
+| Transaction amount deviation | How different from user's average | User avg MMK 10K, current MMK 500K (50x) |
+| Time-of-day pattern | Unusual hour for this user | User typically transacts 8am-8pm, current: 3am |
+| Device change | New device for this user | User has used 2 devices, now using 3rd |
+| Recipient pattern | Sending to new recipients | User has 10 contacts, now sending to 11th new one |
+| Geographic anomaly | Transaction from unusual location | User in Yangon, transaction from Mandalay |
+| Velocity anomaly | Burst of transactions | 10 transactions in 5 minutes (normal: 2/day) |
+
+---
+
+### Q7.2: How would you implement the tiered KYC system for FDB Pay?
+
+**Answer:**
+
+**KYC Tier Architecture:**
+
+```
+BASIC (Phone + OTP):   MMK 500K daily limit, MMK 5M monthly
+ENHANCED (NRC + Photo): MMK 5M daily limit, MMK 50M monthly
+FULL (In-branch):       MMK 50M daily limit, MMK 500M monthly
+```
+
+**BASIC Tier (Phone + OTP):**
+
+```python
+def register_basic(phone, otp):
+    if not verify_otp(phone, otp):
+        return Error("Invalid OTP")
+
+    existing_user = db.query("SELECT id FROM users WHERE phone = %s", phone)
+    if existing_user:
+        return Error("Phone already registered")
+
+    user = db.insert("users", {
+        "phone": phone,
+        "status": "ACTIVE",
+        "kyc_tier": "NONE"
+    })
+
+    wallet = db.insert("wallets", {
+        "user_id": user.id,
+        "daily_limit": 500000,
+        "monthly_limit": 5000000,
+        "kyc_tier": "BASIC"
+    })
+
+    return Success(user, wallet)
+```
+
+**ENHANCED Tier (NRC + Photo):**
+
+```python
+def upgrade_to_enhanced(user_id, nrc_front, nrc_back, selfie):
+    nrc_front_url = s3.upload(nrc_front, f"kyc/{user_id}/nrc_front.jpg")
+    nrc_back_url = s3.upload(nrc_back, f"kyc/{user_id}/nrc_back.jpg")
+    selfie_url = s3.upload(selfie, f"kyc/{user_id}/selfie.jpg")
+
+    db.insert("kyc_documents", {
+        "user_id": user_id,
+        "tier": "ENHANCED",
+        "documents": [
+            {"type": "NRC_FRONT", "file_url": nrc_front_url},
+            {"type": "NRC_BACK", "file_url": nrc_back_url},
+            {"type": "SELFIE", "file_url": selfie_url}
+        ],
+        "status": "PENDING"
+    })
+
+    kafka_publish("kyc.submitted", {"user_id": user_id, "tier": "ENHANCED"})
+    db.update("users", user_id, {"status": "KYC_PENDING"})
+
+    return Success("KYC documents submitted for review")
+```
+
+**FULL Tier (In-branch):**
+
+```python
+def upgrade_to_full(user_id, branch_id, verifier_id):
+    if not verify_branch_visit(user_id, branch_id):
+        return Error("Branch verification not found")
+
+    db.update("users", user_id, {"kyc_tier": "FULL", "status": "VERIFIED"})
+    db.update("wallets", {"user_id": user_id}, {
+        "kyc_tier": "FULL",
+        "daily_limit": 50000000,
+        "monthly_limit": 500000000
+    })
+
+    db.insert("audit_log", {
+        "actor_id": verifier_id,
+        "action": "KYC_UPGRADE_FULL",
+        "resource_type": "USER",
+        "resource_id": user_id
+    })
+
+    return Success("KYC upgraded to FULL tier")
+```
+
+---
+
+## 8. API Design
+
+---
+
+### Q8.1: How would you design the API for FDB Pay's P2P transfer?
 
 **Answer:**
 
@@ -1153,11 +2612,11 @@ def validate_transfer_request(request):
 
 ---
 
-## 8. Real-Time & Async Processing
+## 9. Real-Time & Async Processing
 
 ---
 
-### Q8.1: How would you implement real-time transaction monitoring for FDB Pay?
+### Q9.1: How would you implement real-time transaction monitoring for FDB Pay?
 
 **Answer:**
 
@@ -1198,11 +2657,11 @@ HAVING COUNT(*) > 10 OR SUM(amount) > 1000000;
 
 ---
 
-## 9. Settlement & Reconciliation
+## 10. Settlement & Reconciliation
 
 ---
 
-### Q9.1: How does the merchant settlement process work end-to-end?
+### Q10.1: How does the merchant settlement process work end-to-end?
 
 **Answer:**
 
@@ -1272,11 +2731,11 @@ WHERE t.total_txn_amount != COALESCE(s.settled_amount, 0);
 
 ---
 
-## 10. Mobile & Offline Considerations
+## 11. Mobile & Offline Considerations
 
 ---
 
-### Q10.1: How would you handle USSD-based transactions for feature phone users in Myanmar?
+### Q11.1: How would you handle USSD-based transactions for feature phone users in Myanmar?
 
 **Answer:**
 
@@ -1383,11 +2842,11 @@ class USSDSession:
 
 ---
 
-## 11. Compliance & Regulatory
+## 12. Compliance & Regulatory
 
 ---
 
-### Q11.1: How would you implement AML/CFT compliance for FDB Pay?
+### Q12.1: How would you implement AML/CFT compliance for FDB Pay?
 
 **Answer:**
 
@@ -1486,11 +2945,11 @@ def generate_str(transaction, reason):
 
 ---
 
-## 12. Operational & Observability
+## 13. Operational & Observability
 
 ---
 
-### Q12.1: How would you monitor FDB Pay in production? What dashboards would you create?
+### Q13.1: How would you monitor FDB Pay in production? What dashboards would you create?
 
 **Answer:**
 
@@ -1594,11 +3053,11 @@ groups:
 
 ---
 
-## 13. Cost & Trade-offs
+## 14. Cost & Trade-offs
 
 ---
 
-### Q13.1: What are the key architectural trade-offs you made for FDB Pay?
+### Q14.1: What are the key architectural trade-offs you made for FDB Pay?
 
 **Answer:**
 
@@ -1637,7 +3096,7 @@ We could build a fully configurable payment routing system, but Myanmar's paymen
 
 ---
 
-### Q13.2: If you could redesign FDB Pay from scratch, what would you change?
+### Q14.2: If you could redesign FDB Pay from scratch, what would you change?
 
 **Answer:**
 
@@ -1676,7 +3135,7 @@ Myanmar has connectivity issues between regions. Consider regional read replicas
 
 ---
 
-### Q13.3: How would you estimate the infrastructure cost for FDB Pay at 500K users?
+### Q14.3: How would you estimate the infrastructure cost for FDB Pay at 500K users?
 
 **Answer:**
 
