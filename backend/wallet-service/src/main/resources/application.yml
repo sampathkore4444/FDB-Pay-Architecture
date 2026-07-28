@@ -6,7 +6,7 @@ spring:
     name: wallet-service
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/fdbpay_wallet
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:fdbpay_wallet}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver

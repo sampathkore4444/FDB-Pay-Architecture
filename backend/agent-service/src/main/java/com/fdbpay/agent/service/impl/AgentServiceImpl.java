@@ -16,6 +16,7 @@ import com.fdbpay.shared.event.TransactionEvent;
 import com.fdbpay.shared.exceptions.BusinessException;
 import com.fdbpay.shared.exceptions.InsufficientBalanceException;
 import com.fdbpay.shared.exceptions.ResourceNotFoundException;
+import com.fdbpay.agent.service.CommissionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -38,6 +39,7 @@ public class AgentServiceImpl implements AgentService {
     private final AgentTransactionRepository agentTransactionRepository;
     private final WebClient walletWebClient;
     private final KafkaTemplate<String, TransactionEvent> kafkaTemplate;
+    private final CommissionService commissionService;
 
     @Override
     public AgentAccountResponse getAgentAccount(UUID userId) {
@@ -98,6 +100,8 @@ public class AgentServiceImpl implements AgentService {
 
         log.info("Cash-in completed: agent={}, customer={}, amount={}", agentUserId, request.getCustomerPhone(), request.getAmount());
 
+        commissionService.recordCommission(agentUserId, transaction.getId(), "CASH_IN", request.getAmount());
+
         return ApiResponse.success(mapToTransactionResponse(transaction));
     }
 
@@ -148,6 +152,8 @@ public class AgentServiceImpl implements AgentService {
         kafkaTemplate.send(AppConstants.TOPIC_TXN_COMPLETED, event);
 
         log.info("Cash-out completed: agent={}, customer={}, amount={}", agentUserId, request.getCustomerPhone(), request.getAmount());
+
+        commissionService.recordCommission(agentUserId, transaction.getId(), "CASH_OUT", request.getAmount());
 
         return ApiResponse.success(mapToTransactionResponse(transaction));
     }

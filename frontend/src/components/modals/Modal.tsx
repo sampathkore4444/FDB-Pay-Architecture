@@ -1,5 +1,3 @@
-import { cn } from '../../utils';
-
 interface ModalProps {
   open: boolean;
   onClose: () => void;

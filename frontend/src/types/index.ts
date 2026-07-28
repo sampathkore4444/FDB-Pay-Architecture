@@ -93,3 +93,125 @@ export interface BillLookup {
   amount: number;
   dueDate: string;
 }
+
+export interface MoneyRequest {
+  id: string;
+  requesterId: string;
+  requesterName: string;
+  targetPhone: string;
+  amount: number;
+  description?: string;
+  paymentLink: string;
+  status: 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'CANCELLED';
+  createdAt: string;
+  respondedAt?: string;
+}
+
+export interface InvoiceItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+export interface Invoice {
+  id: string;
+  merchantId: string;
+  customerPhone: string;
+  customerName: string;
+  items: InvoiceItem[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  dueDate: string;
+  status: 'DRAFT' | 'SENT' | 'PAID' | 'CANCELLED';
+  createdAt: string;
+  sentAt?: string;
+  paidAt?: string;
+}
+
+export interface RemittanceCorridor {
+  id: string;
+  sourceCountry: string;
+  sourceCurrency: string;
+  destCurrency: string;
+  exchangeRate: number;
+  fee: number;
+  minAmount: number;
+  maxAmount: number;
+  partnerName: string;
+  estimatedDelivery: string;
+  status: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface Remittance {
+  id: string;
+  corridorId: string;
+  sourceCountry: string;
+  senderName: string;
+  senderPhone: string;
+  sourceAmount: number;
+  sourceCurrency: string;
+  destAmount: number;
+  destCurrency: string;
+  exchangeRate: number;
+  fee: number;
+  recipientPhone: string;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface Promotion {
+  id: string;
+  title: string;
+  description: string;
+  type: 'DISCOUNT' | 'CASHBACK' | 'COUPON';
+  discountValue: number;
+  minAmount: number;
+  maxDiscount: number;
+  validFrom: string;
+  validTo: string;
+  usageLimit: number;
+  usedCount: number;
+  promoCode?: string;
+  status: 'ACTIVE' | 'EXPIRED' | 'USED';
+}
+
+export interface CashbackWallet {
+  id: string;
+  balance: number;
+  totalEarned: number;
+  totalRedeemed: number;
+  currency: string;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  senderName: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  userId: string;
+  userName: string;
+  subject: string;
+  category: string;
+  priority: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'ESCALATED' | 'CLOSED';
+  messages: TicketMessage[];
+  assignedTo?: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+}
+
+export interface SupportStats {
+  totalOpen: number;
+  totalResolved: number;
+  avgResponseHours: number;
+}

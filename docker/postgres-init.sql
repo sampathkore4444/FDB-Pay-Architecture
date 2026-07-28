@@ -1,0 +1,15 @@
+CREATE DATABASE fdbpay_auth;
+CREATE DATABASE fdbpay_wallet;
+CREATE DATABASE fdbpay_transfer;
+CREATE DATABASE fdbpay_merchant;
+CREATE DATABASE fdbpay_bills;
+CREATE DATABASE fdbpay_agent;
+CREATE DATABASE fdbpay_corporate;
+CREATE DATABASE fdbpay_kyc;
+CREATE DATABASE fdbpay_reporting;
+CREATE DATABASE fdbpay_settlement;
+CREATE DATABASE fdbpay_dispute;
+CREATE DATABASE fdbpay_audit;
+CREATE DATABASE fdbpay_remittance;
+CREATE DATABASE fdbpay_promotions;
+CREATE DATABASE fdbpay_support;

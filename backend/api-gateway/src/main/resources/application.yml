@@ -24,10 +24,12 @@ spring:
           uri: lb://merchant-service
           predicates:
             - Path=/v1/merchant/**
+            - Path=/v1/merchants/**
         - id: bill-payment-service
           uri: lb://bill-payment-service
           predicates:
             - Path=/v1/bills/**
+            - Path=/v1/airtime/**
         - id: agent-service
           uri: lb://agent-service
           predicates:
@@ -36,7 +38,19 @@ spring:
           uri: lb://corporate-service
           predicates:
             - Path=/v1/corp/**
-        - id: admin-service
+        - id: settlement-service
+          uri: lb://settlement-service
+          predicates:
+            - Path=/v1/settlements/**
+        - id: dispute-service
+          uri: lb://dispute-service
+          predicates:
+            - Path=/v1/disputes/**
+        - id: audit-service
+          uri: lb://audit-service
+          predicates:
+            - Path=/v1/audit/**
+        - id: reporting-service
           uri: lb://reporting-service
           predicates:
             - Path=/v1/admin/**
@@ -44,6 +58,68 @@ spring:
           uri: lb://kyc-service
           predicates:
             - Path=/v1/kyc/**
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/v1/notifications/**
+        - id: fraud-risk-service
+          uri: lb://fraud-risk-service
+          predicates:
+            - Path=/v1/fraud/**
+        - id: remittance-service
+          uri: lb://remittance-service
+          predicates:
+            - Path=/v1/remittance/**
+        - id: promotions-service
+          uri: lb://promotions-service
+          predicates:
+            - Path=/v1/promotions/**
+        - id: support-service
+          uri: lb://support-service
+          predicates:
+            - Path=/v1/support/**
+        - id: wallet-service-savings
+          uri: lb://wallet-service
+          predicates:
+            - Path=/v1/savings/**
+          filters:
+            - RewritePath=/v1/savings/(?<segment>.*), /wallet/savings/${segment}
+        - id: merchant-service-staff
+          uri: lb://merchant-service
+          predicates:
+            - Path=/v1/staff/**
+          filters:
+            - RewritePath=/v1/staff/(?<segment>.*), /merchant/staff/${segment}
+        - id: merchant-service-directory
+          uri: lb://merchant-service
+          predicates:
+            - Path=/v1/directory/**
+          filters:
+            - RewritePath=/v1/directory/(?<segment>.*), /merchants/directory/${segment}
+        - id: merchant-service-invoices
+          uri: lb://merchant-service
+          predicates:
+            - Path=/v1/invoices/**
+          filters:
+            - RewritePath=/v1/invoices/(?<segment>.*), /merchant/invoices/${segment}
+        - id: transfer-service-schedule
+          uri: lb://transfer-service
+          predicates:
+            - Path=/v1/scheduled/**
+          filters:
+            - RewritePath=/v1/scheduled/(?<segment>.*), /transfer/schedule/${segment}
+        - id: transfer-service-request
+          uri: lb://transfer-service
+          predicates:
+            - Path=/v1/request-money/**
+          filters:
+            - RewritePath=/v1/request-money/(?<segment>.*), /transfer/request/${segment}
+        - id: corporate-service-payroll
+          uri: lb://corporate-service
+          predicates:
+            - Path=/v1/payroll/**
+          filters:
+            - RewritePath=/v1/payroll/(?<segment>.*), /corp/payroll/${segment}
 
   data:
     redis:

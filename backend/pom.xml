@@ -31,6 +31,13 @@
         <module>fraud-risk-service</module>
         <module>reporting-service</module>
         <module>kyc-service</module>
+        <module>settlement-service</module>
+        <module>dispute-service</module>
+        <module>audit-service</module>
+        <module>remittance-service</module>
+        <module>promotions-service</module>
+        <module>support-service</module>
+        <module>eureka-server</module>
     </modules>
 
     <properties>

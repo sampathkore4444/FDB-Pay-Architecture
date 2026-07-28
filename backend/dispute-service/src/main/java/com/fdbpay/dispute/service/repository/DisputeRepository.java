@@ -1,0 +1,32 @@
+package com.fdbpay.dispute.service.repository;
+
+import com.fdbpay.dispute.service.model.Dispute;
+import com.fdbpay.dispute.service.model.enums.DisputeStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.UUID;
+
+@Repository
+public interface DisputeRepository extends JpaRepository<Dispute, UUID> {
+
+    List<Dispute> findByTransactionId(UUID transactionId);
+
+    Page<Dispute> findByComplainantUserIdOrderByCreatedAtDesc(UUID complainantUserId, Pageable pageable);
+
+    Page<Dispute> findByStatusOrderByCreatedAtDesc(DisputeStatus status, Pageable pageable);
+
+    long countByStatus(DisputeStatus status);
+
+    @Query("SELECT AVG(FUNCTION('EXTRACT', FUNCTION('EPOCH', d.resolvedAt - d.createdAt)) / 3600.0) " +
+            "FROM Dispute d WHERE d.resolvedAt IS NOT NULL")
+    Double avgResolutionHours();
+
+    @Query("SELECT d FROM Dispute d ORDER BY d.createdAt DESC")
+    Page<Dispute> findAllOrderByCreatedAtDesc(Pageable pageable);
+}

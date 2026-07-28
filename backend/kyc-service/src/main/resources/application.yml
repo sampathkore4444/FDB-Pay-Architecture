@@ -6,7 +6,7 @@ spring:
     name: kyc-service
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/fdbpay_kyc
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:fdbpay_kyc}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver

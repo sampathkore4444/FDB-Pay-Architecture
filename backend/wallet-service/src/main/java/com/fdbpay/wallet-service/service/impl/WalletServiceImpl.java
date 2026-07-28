@@ -16,8 +16,9 @@ import com.fdbpay.wallet.service.model.enums.WalletStatus;
 import com.fdbpay.wallet.service.repository.LedgerEntryRepository;
 import com.fdbpay.wallet.service.repository.WalletRepository;
 import com.fdbpay.wallet.service.service.WalletService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -34,13 +35,26 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class WalletServiceImpl implements WalletService {
 
     private final WalletRepository walletRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
     private final KafkaTemplate<String, TransactionEvent> kafkaTemplate;
     private final RedisTemplate<String, Object> redisTemplate;
+
+    @Autowired
+    @Lazy
+    private com.fdbpay.wallet.service.service.SavingsService savingsService;
+
+    public WalletServiceImpl(WalletRepository walletRepository,
+                             LedgerEntryRepository ledgerEntryRepository,
+                             KafkaTemplate<String, TransactionEvent> kafkaTemplate,
+                             RedisTemplate<String, Object> redisTemplate) {
+        this.walletRepository = walletRepository;
+        this.ledgerEntryRepository = ledgerEntryRepository;
+        this.kafkaTemplate = kafkaTemplate;
+        this.redisTemplate = redisTemplate;
+    }
 
     @Override
     @Cacheable(value = "wallet", key = "#userId")
