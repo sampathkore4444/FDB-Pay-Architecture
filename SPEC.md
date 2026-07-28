@@ -13,6 +13,7 @@
 3. [User Personas](#3-user-personas)
 4. [Feature Specification](#4-feature-specification)
 5. [System Architecture](#5-system-architecture)
+   - [Technology Stack](#53-technology-stack)
 6. [Detailed Service Design](#6-detailed-service-design)
 7. [Database Design](#7-database-design)
 8. [API Specification](#8-api-specification)
@@ -249,6 +250,37 @@ The platform supports peer-to-peer (P2P) transfers, merchant payments (QR & POS)
 | **Zero Trust** | mTLS between services, JWT validation at gateway, least-privilege IAM |
 | **Observability** | Distributed tracing (OpenTelemetry), centralized logging (ELK), metrics (Prometheus/Grafana) |
 | **Offline Resilience** | USSD as fallback, local queue on POS, retry with exponential backoff |
+
+### 5.3 Technology Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Backend Language** | Python 3.12+ | Primary service implementation |
+| **Frontend (Mobile)** | Kotlin (Android), Swift (iOS) | Native mobile apps |
+| **Frontend (Web)** | React / Next.js | Admin, merchant, corporate dashboards |
+| **API Protocol** | REST (JSON), gRPC (internal) | External & internal communication |
+| **Database (OLTP)** | PostgreSQL 16 | Primary transactional data store (wallets, ledgers, users) |
+| **Database (Document)** | MongoDB 7 | KYC documents, unstructured data |
+| **Cache / Session** | Redis 7 (Cluster) | Session store, rate limiting, balance cache, OTP |
+| **Search / Logs** | Elasticsearch 8 | Full-text search, centralized logging, audit trail |
+| **Object Storage** | MinIO (S3-compatible) | KYC files, reports, exports |
+| **Event Streaming** | Apache Kafka 3 | Async inter-service communication, event sourcing |
+| **Stream Processing** | Apache Flink | Real-time fraud detection, velocity aggregation |
+| **Container Runtime** | Docker | Application packaging |
+| **Orchestration** | Kubernetes (on-premise) | Service deployment, scaling, self-healing |
+| **Service Mesh** | Istio | mTLS, traffic management, observability |
+| **CI/CD** | GitLab CI + ArgoCD | Build pipelines, GitOps deployment |
+| **Monitoring** | Prometheus + Grafana | Metrics collection, dashboards, alerting |
+| **Logging** | Fluentd → Elasticsearch → Kibana | Centralized log aggregation |
+| **Tracing** | Jaeger (OpenTelemetry) | Distributed request tracing |
+| **Secrets Management** | HashiCorp Vault | Secure secret storage and rotation |
+| **HSM** | Thales Luna HSM | Cryptographic key management (PCI DSS) |
+| **WAF** | ModSecurity + Nginx | Web application firewall |
+| **Load Balancer** | Nginx / HAProxy | External traffic routing, SSL termination |
+| **DNS** | CoreDNS | Internal Kubernetes service discovery |
+| **Backup** | Velero (K8s), pgBackRest (PG) | Cluster and database backup/restore |
+| **SMS Providers** | MPT Bulk SMS, Twilio, Unifone | Transactional and promotional SMS |
+| **Push Notifications** | FCM (Android), APNs (iOS) | Mobile push delivery |
 
 ---
 
