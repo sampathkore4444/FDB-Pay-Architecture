@@ -255,9 +255,9 @@ The platform supports peer-to-peer (P2P) transfers, merchant payments (QR & POS)
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Backend Language** | Python 3.12+ | Primary service implementation |
+| **Backend Framework** | Java 21 + Spring Boot 3 | Primary service implementation |
 | **Frontend (Mobile)** | Kotlin (Android), Swift (iOS) | Native mobile apps |
-| **Frontend (Web)** | React / Next.js | Admin, merchant, corporate dashboards |
+| **Frontend (Web)** | React | Admin, merchant, corporate dashboards |
 | **API Protocol** | REST (JSON), gRPC (internal) | External & internal communication |
 | **Database (OLTP)** | PostgreSQL 16 | Primary transactional data store (wallets, ledgers, users) |
 | **Database (Document)** | MongoDB 7 | KYC documents, unstructured data |
