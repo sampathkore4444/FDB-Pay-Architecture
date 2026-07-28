@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/v1/auth/**
+        - id: wallet-service
+          uri: lb://wallet-service
+          predicates:
+            - Path=/v1/wallet/**
+        - id: transfer-service
+          uri: lb://transfer-service
+          predicates:
+            - Path=/v1/transfer/**
+        - id: merchant-service
+          uri: lb://merchant-service
+          predicates:
+            - Path=/v1/merchant/**
+        - id: bill-payment-service
+          uri: lb://bill-payment-service
+          predicates:
+            - Path=/v1/bills/**
+        - id: agent-service
+          uri: lb://agent-service
+          predicates:
+            - Path=/v1/agent/**
+        - id: corporate-service
+          uri: lb://corporate-service
+          predicates:
+            - Path=/v1/corp/**
+        - id: admin-service
+          uri: lb://reporting-service
+          predicates:
+            - Path=/v1/admin/**
+        - id: kyc-service
+          uri: lb://kyc-service
+          predicates:
+            - Path=/v1/kyc/**
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+jwt:
+  secret: ${JWT_SECRET:your-256-bit-secret-key-change-in-production}
+
+server:
+  port: 8080
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
