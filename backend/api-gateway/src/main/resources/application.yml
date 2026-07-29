@@ -12,6 +12,8 @@ spring:
           uri: lb://auth-service
           predicates:
             - Path=/v1/auth/**
+          filters:
+            - RewritePath=/v1/auth/(?<segment>.*), /auth/${segment}
         - id: wallet-service
           uri: lb://wallet-service
           predicates:

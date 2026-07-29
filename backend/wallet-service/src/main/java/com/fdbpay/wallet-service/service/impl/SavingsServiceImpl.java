@@ -263,7 +263,7 @@ public class SavingsServiceImpl implements SavingsService {
             }
 
             BigDecimal monthlyRate = pocket.getInterestRate().divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP);
-            Long interestAmount = pocket.getCurrentAmount()
+            Long interestAmount = BigDecimal.valueOf(pocket.getCurrentAmount())
                     .multiply(monthlyRate)
                     .setScale(0, RoundingMode.HALF_UP)
                     .longValue();

@@ -45,10 +45,19 @@
         <spring-cloud.version>2023.0.3</spring-cloud.version>
         <jjwt.version>0.12.6</jjwt.version>
         <shared.version>1.0.0-SNAPSHOT</shared.version>
+        <spring-kafka.version>3.2.2</spring-kafka.version>
+        <kafka.version>3.7.1</kafka.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>3.3.2</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
@@ -60,6 +69,16 @@
                 <groupId>com.fdbpay</groupId>
                 <artifactId>shared</artifactId>
                 <version>${shared.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.kafka</groupId>
+                <artifactId>spring-kafka</artifactId>
+                <version>${spring-kafka.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>kafka-clients</artifactId>
+                <version>${kafka.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

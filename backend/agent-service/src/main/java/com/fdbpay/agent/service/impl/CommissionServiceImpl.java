@@ -44,7 +44,7 @@ public class CommissionServiceImpl implements CommissionService {
     @Transactional
     public void recordCommission(UUID agentUserId, UUID transactionId, String type, Long amount) {
         BigDecimal commissionRate = "CASH_IN".equals(type) ? CASH_IN_RATE : CASH_OUT_RATE;
-        Long commissionAmount = amount.multiply(commissionRate)
+        Long commissionAmount = BigDecimal.valueOf(amount).multiply(commissionRate)
                 .setScale(0, RoundingMode.HALF_UP)
                 .longValue();
 
@@ -144,8 +144,9 @@ public class CommissionServiceImpl implements CommissionService {
         agentAccountRepository.save(agent);
 
         walletWebClient.post()
-                .uri("/wallet/credit")
-                .queryParam("userId", agentUserId)
+                .uri(uriBuilder -> uriBuilder.path("/wallet/credit")
+                        .queryParam("userId", agentUserId)
+                        .build())
                 .bodyValue(Map.of(
                         "amount", request.getAmount(),
                         "idempotencyKey", "COMM_WD_" + UUID.randomUUID()

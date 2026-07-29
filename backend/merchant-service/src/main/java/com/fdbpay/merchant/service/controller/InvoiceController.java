@@ -24,7 +24,8 @@ public class InvoiceController {
     private final MerchantRepository merchantRepository;
 
     private UUID resolveMerchantId(UUID userId) {
-        return merchantRepository.findByUserId(userId)
+        return merchantRepository.findByUserId(userId).stream()
+                .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Merchant", "userId=" + userId)).getId();
     }
 
