@@ -109,6 +109,7 @@ services:
       REDIS_HOST: redis
       EUREKA_URL: http://eureka-server:8761/eureka/
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: your-256-bit-secret-key-for-local-dev-only-change-in-prod
     ports:
       - "8081:8081"
     depends_on:
@@ -190,7 +191,7 @@ services:
       SERVICE_NAME: merchant-service
       SERVER_PORT: "8084"
       DB_HOST: postgres
-      REDIS_HOST: redis
+      SPRING_DATA_REDIS_HOST: redis
       EUREKA_URL: http://eureka-server:8761/eureka/
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     ports:
@@ -386,6 +387,8 @@ services:
       REDIS_HOST: redis
       EUREKA_URL: http://eureka-server:8761/eureka/
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      WALLET_SERVICE_URL: http://wallet-service:8082
+      TRANSFER_SERVICE_URL: http://transfer-service:8083
     ports:
       - "8091:8091"
     depends_on:

@@ -26,11 +26,21 @@ spring:
           uri: lb://merchant-service
           predicates:
             - Path=/v1/merchant/**
+          filters:
+            - StripPrefix=1
+        - id: merchant-service-merchants
+          uri: lb://merchant-service
+          predicates:
             - Path=/v1/merchants/**
+          filters:
+            - StripPrefix=1
         - id: bill-payment-service
           uri: lb://bill-payment-service
           predicates:
             - Path=/v1/bills/**
+        - id: airtime-service
+          uri: lb://airtime-service
+          predicates:
             - Path=/v1/airtime/**
         - id: agent-service
           uri: lb://agent-service
@@ -91,7 +101,7 @@ spring:
           predicates:
             - Path=/v1/staff/**
           filters:
-            - RewritePath=/v1/staff/(?<segment>.*), /merchant/staff/${segment}
+            - StripPrefix=1
         - id: merchant-service-directory
           uri: lb://merchant-service
           predicates:

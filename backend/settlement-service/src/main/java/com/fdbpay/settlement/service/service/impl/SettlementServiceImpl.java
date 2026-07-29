@@ -96,8 +96,8 @@ public class SettlementServiceImpl implements SettlementService {
                 Object grossObj = hashOps.get(key, "grossAmount");
                 Object countObj = hashOps.get(key, "transactionCount");
 
-                long grossAmount = grossObj != 0 ? Long.parseLong(grossObj.toString()) : 0L;
-                int transactionCount = countObj != 0 ? Integer.parseInt(countObj.toString()) : 0;
+                long grossAmount = grossObj != null ? Long.parseLong(grossObj.toString()) : 0L;
+                int transactionCount = countObj != null ? Integer.parseInt(countObj.toString()) : 0;
 
                 if (grossAmount <= 0) {
                     continue;

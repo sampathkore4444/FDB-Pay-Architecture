@@ -68,7 +68,7 @@ public class RemittanceServiceImpl implements RemittanceService {
         }
 
         long fee = calculateFee(amount, corridor);
-        long amountMmk = amount.multiply(corridor.getExchangeRate()).longValue() - fee;
+        long amountMmk = BigDecimal.valueOf(amount).multiply(corridor.getExchangeRate()).longValue() - fee;
 
         return RemittanceRateQuoteResponse.builder()
                 .corridor(corridorCode)

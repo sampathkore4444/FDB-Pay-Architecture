@@ -138,7 +138,7 @@ public class ReportingServiceImpl implements ReportingService {
             if (response != null && response.containsKey("data")) {
                 Object data = response.get("data");
                 if (data instanceof Map) {
-                    return ((Number) ((Map<?, ?>) data).getOrDefault("count", 0L)).longValue();
+                    return ((Number) ((Map) data).getOrDefault("count", 0L)).longValue();
                 }
             }
         } catch (Exception e) {
@@ -157,7 +157,7 @@ public class ReportingServiceImpl implements ReportingService {
             if (response != null && response.containsKey("data")) {
                 Object data = response.get("data");
                 if (data instanceof Map) {
-                    return ((Number) ((Map<?, ?>) data).getOrDefault("count", 0L)).longValue();
+                    return ((Number) ((Map) data).getOrDefault("count", 0L)).longValue();
                 }
             }
         } catch (Exception e) {
@@ -176,7 +176,7 @@ public class ReportingServiceImpl implements ReportingService {
             if (response != null && response.containsKey("data")) {
                 Object data = response.get("data");
                 if (data instanceof Map) {
-                    return ((Number) ((Map<?, ?>) data).getOrDefault("totalVolume", 0L)).longValue();
+                    return ((Number) ((Map) data).getOrDefault("totalVolume", 0L)).longValue();
                 }
             }
         } catch (Exception e) {
