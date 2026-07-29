@@ -178,17 +178,15 @@ package org.springframework.web.reactive.function.client does not exist
 cannot find symbol: class WebClient
 ```
 
-The services affected:
+The services affected (6 total):
 - auth-service
 - agent-service
 - corporate-service
 - promotions-service
 - remittance-service
 - reporting-service
-- dispute-service
-- transfer-service
 
-`bill-payment-service` already had `spring-boot-starter-webflux` declared and compiled successfully.
+`bill-payment-service`, `dispute-service`, and `transfer-service` also use `WebClient` but already had `spring-boot-starter-webflux` declared and compiled successfully.
 
 ### Solution
 Added the following dependency block to each affected service's `pom.xml`:
@@ -360,7 +358,41 @@ The `uri(Function<UriBuilder, URI>)` overload allows building the complete URI i
 
 ---
 
-## 11. Shared library beans not scanned — `JwtTokenProvider` not found
+## 11. Missing `lombok` dependency in `api-gateway`
+
+### Issue
+`api-gateway/src/main/java/com/fdbpay/apigateway/ApiGatewayApplication.java` uses the `@Slf4j` annotation (from Lombok) for logging, but `api-gateway/pom.xml` did not declare Lombok as a dependency:
+
+```java
+@Slf4j
+@SpringBootApplication(scanBasePackages = {"com.fdbpay.apigateway", "com.fdbpay.shared"})
+public class ApiGatewayApplication {
+```
+
+This caused a compilation failure because the Lombok annotation processor wasn't available:
+
+```
+Cannot resolve symbol 'log'
+```
+
+The `api-gateway` is the only service that was missing Lombok — all other services already had it declared in their `pom.xml`.
+
+### Solution
+Added the Lombok dependency to `api-gateway/pom.xml`:
+
+```xml
+<dependency>
+    <groupId>org.projectlombok</groupId>
+    <artifactId>lombok</artifactId>
+    <optional>true</optional>
+</dependency>
+```
+
+No version is needed because `lombok` is managed by the `spring-boot-dependencies` BOM (version 1.18.34 for Spring Boot 3.3.2). The `<optional>true</optional>` prevents Lombok from being included as a transitive dependency when other projects depend on `api-gateway`.
+
+---
+
+## 12. Shared library beans not scanned — `JwtTokenProvider` not found
 
 ### Issue
 `auth-service` and `api-gateway` depend on `JwtTokenProvider` from the `shared` library (package `com.fdbpay.shared.config`). At runtime, Spring Boot failed to find the bean:
@@ -388,7 +420,7 @@ This tells Spring Boot to scan both the service's own package and the shared lib
 
 ---
 
-## 12. API Gateway route for auth-service needs path rewriting
+## 13. API Gateway route for auth-service needs path rewriting
 
 ### Issue
 The API Gateway routes `/v1/auth/**` to the auth-service via:
@@ -424,7 +456,7 @@ The frontend's nginx already proxies `/v1/*` requests to the API Gateway, so thi
 
 ---
 
-## 13. `bitnami/kafka:3.7` Docker image not found
+## 14. `bitnami/kafka:3.7` Docker image not found
 
 ### Issue
 The docker-compose.yml used `bitnami/kafka:3.7` as the Kafka image. This tag (and all Bitnami Kafka tags) were unavailable in the Docker registry:
@@ -462,7 +494,7 @@ kafka:
 
 ---
 
-## 14. Port conflicts with existing Docker containers
+## 15. Port conflicts with existing Docker containers
 
 ### Issue
 Multiple ports were already in use by other projects running on the same host:
@@ -500,7 +532,7 @@ ports:
 
 ---
 
-## 15. API Gateway container starts without a network
+## 16. API Gateway container starts without a network
 
 ### Issue
 When Docker Compose fails to bind a host port, it still creates the container but does not attach it to the Docker network. This resulted in:
@@ -528,7 +560,7 @@ This ensures the container is properly attached to the `fdb_pay_default` network
 
 ---
 
-## 16. `shared` library POMs not copied in Docker build
+## 17. `shared` library POMs not copied in Docker build
 
 ### Issue
 The Dockerfile was modified to build only a subset of services (`shared,api-gateway,auth-service,notification-service,eureka-server`), but the root `pom.xml` declares all 20 modules. Maven requires all declared module directories to exist during POM parsing:
@@ -560,7 +592,7 @@ The `-pl` flag restricts the build to these 5 modules. The `-am` ("also make") f
 
 ---
 
-## 17. `eureka-server/pom.xml` uses `spring-boot-starter-parent` directly (inconsistency)
+## 18. `eureka-server/pom.xml` uses `spring-boot-starter-parent` directly (inconsistency)
 
 ### Issue
 Unlike all other service POMs that use `com.fdbpay:fdb-pay-parent` as their parent, `eureka-server/pom.xml` inherits directly from `org.springframework.boot:spring-boot-starter-parent`:
@@ -594,7 +626,7 @@ This was not applied because `eureka-server` builds and runs fine with the curre
 
 ---
 
-## 18. Accidental mass replacement of `org.springframework.boot` groupId during kafka fix
+## 19. Accidental mass replacement of `org.springframework.boot` groupId during kafka fix
 
 ### Issue
 While replacing `spring-boot-starter-kafka` with `spring-kafka`, an overly broad `sed` command was used:
@@ -631,7 +663,7 @@ The key lesson: when doing bulk find-and-replace in XML/Maven POMs, always scope
 
 ---
 
-## 19. Notification-service fails at runtime with DataSource configuration error
+## 20. Notification-service fails at runtime with DataSource configuration error
 
 ### Issue
 The notification-service starts up but immediately exits with:
@@ -663,7 +695,7 @@ spring:
 
 ---
 
-## 20. Dockerfile stages copy all source but build only a subset of services
+## 21. Dockerfile stages copy all source but build only a subset of services
 
 ### Issue
 The original Dockerfile copied ALL service source directories into the build image and ran `mvn clean package -DskipTests -B -T 2C` to build everything. Many services had compilation errors unrelated to the login flow.
@@ -695,7 +727,7 @@ COPY --from=builder /build/wallet-service/target/*.jar /app/wallet-service.jar
 COPY --from=builder /build/transfer-service/target/*.jar /app/transfer-service.jar
 ```
 
-Compilation errors in these services must be resolved first (see issues #5 through #10 for the pattern of fixes needed).
+Compilation errors in these services must be resolved first (see issues #5 through #11 for the pattern of fixes needed).
 
 ---
 
