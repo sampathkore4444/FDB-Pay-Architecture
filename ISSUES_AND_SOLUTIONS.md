@@ -560,6 +560,156 @@ The `-pl` flag restricts the build to these 5 modules. The `-am` ("also make") f
 
 ---
 
+## 17. `eureka-server/pom.xml` uses `spring-boot-starter-parent` directly (inconsistency)
+
+### Issue
+Unlike all other service POMs that use `com.fdbpay:fdb-pay-parent` as their parent, `eureka-server/pom.xml` inherits directly from `org.springframework.boot:spring-boot-starter-parent`:
+
+```xml
+<!-- eureka-server/pom.xml -->
+<parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.2</version>
+    <relativePath/>
+</parent>
+```
+
+This is inconsistent with the rest of the codebase. The `fdb-pay-parent` POM already inherits from `spring-boot-starter-parent` and adds project-wide configuration (dependency management, plugin configuration, etc.). By skipping `fdb-pay-parent`, `eureka-server` misses out on these shared configurations.
+
+However, `eureka-server` compiles and runs successfully even with this inconsistency because it doesn't depend on any `fdb-pay-parent`-specific features (no JJWT, no kafka, no shared library). It only needs the base Spring Boot parent.
+
+### Solution
+While this works, it should be aligned for consistency. Change `eureka-server/pom.xml` to use `fdb-pay-parent`:
+
+```xml
+<parent>
+    <groupId>com.fdbpay</groupId>
+    <artifactId>fdb-pay-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</parent>
+```
+
+This was not applied because `eureka-server` builds and runs fine with the current setup. The change is optional and can be made when refactoring the POM hierarchy.
+
+---
+
+## 18. Accidental mass replacement of `org.springframework.boot` groupId during kafka fix
+
+### Issue
+While replacing `spring-boot-starter-kafka` with `spring-kafka`, an overly broad `sed` command was used:
+
+```bash
+sed -i 's|<groupId>org.springframework.boot</groupId>|<groupId>org.springframework.kafka</groupId>|' "$f"
+```
+
+This replaced **every** occurrence of `org.springframework.boot` as a groupId in all POMs — not just for the kafka dependency. Dependencies like `spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `spring-boot-starter-validation`, etc. all had their groupId incorrectly changed to `org.springframework.kafka`.
+
+### Solution
+Reverted by replacing `org.springframework.kafka` back to `org.springframework.boot` across all POMs, then applied a more targeted approach:
+
+**Method 1 — Python script** (safe, multi-line replacement):
+```python
+import re
+with open('pom.xml', 'r') as f:
+    content = f.read()
+content = content.replace(
+    '<groupId>org.springframework.boot</groupId>\n            <artifactId>spring-kafka</artifactId>',
+    '<groupId>org.springframework.kafka</groupId>\n            <artifactId>spring-kafka</artifactId>'
+)
+with open('pom.xml', 'w') as f:
+    f.write(content)
+```
+
+**Method 2 — Two-pass `sed`** (artifact name first, then groupId for specific artifact):
+```bash
+sed -i '/spring-boot-starter-kafka/s||spring-kafka|' pom.xml       # change artifactId
+# Then use Python or manual edit for the groupId change
+```
+
+The key lesson: when doing bulk find-and-replace in XML/Maven POMs, always scope the replacement to the specific lines you intend to change rather than applying it globally.
+
+---
+
+## 19. Notification-service fails at runtime with DataSource configuration error
+
+### Issue
+The notification-service starts up but immediately exits with:
+
+```
+APPLICATION FAILED TO START
+Description:
+Failed to configure a DataSource: 'url' attribute is not specified and no embedded datasource could be configured.
+Reason: Failed to determine a suitable driver class
+```
+
+The `shared` library (which notification-service depends on) brings in `spring-boot-starter-data-jpa` as a transitive dependency. Spring Boot's auto-configuration detects JPA on the classpath and attempts to configure a `DataSource`, but notification-service is not connected to Postgres (it only uses Redis and Kafka). No `spring.datasource.*` properties are configured for this service.
+
+Looking at the service's `application.yml`, the expected configuration file doesn't exist at a service-specific path, or the `spring.autoconfigure.exclude` directive was not set.
+
+### Solution (not applied)
+This is a **known remaining issue**. The notification-service was not required for the login flow, so it was left unfixed. To fix it, either:
+
+**Option A — Exclude DataSource auto-configuration** in the service's `application.yml`:
+```yaml
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+```
+
+**Option B — Extract JPA dependency from shared library** into each service that actually needs it, so the shared library remains database-agnostic. This is the cleaner long-term approach but requires restructuring the POM hierarchy.
+
+---
+
+## 20. Dockerfile stages copy all source but build only a subset of services
+
+### Issue
+The original Dockerfile copied ALL service source directories into the build image and ran `mvn clean package -DskipTests -B -T 2C` to build everything. Many services had compilation errors unrelated to the login flow.
+
+The fix was to modify the Dockerfile to build only essential services (`shared`, `eureka-server`, `api-gateway`, `auth-service`, `notification-service`). However, this means the built Docker image only contains JARs for these 5 services:
+
+```dockerfile
+COPY --from=builder /build/eureka-server/target/*.jar /app/eureka-server.jar
+COPY --from=builder /build/api-gateway/target/*.jar /app/api-gateway.jar
+COPY --from=builder /build/auth-service/target/*.jar /app/auth-service.jar
+COPY --from=builder /build/notification-service/target/*.jar /app/notification-service.jar
+```
+
+Services like `wallet-service`, `transfer-service`, `merchant-service`, etc. are not built and their JARs are not included in the final image. If these services need to be started later, the Docker image must be rebuilt with a broader `-pl` list (or all modules).
+
+Additionally, the `mvn dependency:go-offline -B || true` step at line 26 of the Dockerfile swallows errors from the offline resolution step. Some POM validation errors appeared here but were ignored because of `|| true`. This is a minor issue since the later `mvn clean package` step performs its own dependency resolution.
+
+### Solution
+The current Dockerfile uses a targeted build for the login-essential services. To add more services later:
+
+**a)** Add the service to the `-pl` list in the build command:
+```dockerfile
+RUN mvn clean package -pl shared,api-gateway,auth-service,wallet-service,transfer-service,notification-service,eureka-server -am -DskipTests -B
+```
+
+**b)** Copy the service's JAR in the final stage:
+```dockerfile
+COPY --from=builder /build/wallet-service/target/*.jar /app/wallet-service.jar
+COPY --from=builder /build/transfer-service/target/*.jar /app/transfer-service.jar
+```
+
+Compilation errors in these services must be resolved first (see issues #5 through #10 for the pattern of fixes needed).
+
+---
+
+## Known remaining issues
+
+| Issue | Affected Service | Severity | Notes |
+|-------|-----------------|----------|-------|
+| DataSource auto-configuration failure | `notification-service` | Medium | Exits at startup; needs `spring.autoconfigure.exclude` |
+| `eureka-server` uses wrong parent | `eureka-server` | Low | Works fine but inconsistent with codebase |
+| Non-essential services not compiled | 16 services | Low | JARs not included in Docker image; rebuild needed to enable |
+| Compilation errors in non-essential services | 10+ services | Low | Code bugs (type mismatches, missing imports) similar to issues #6–10 |
+
+---
+
 ## Summary of files modified
 
 | File | Change |
