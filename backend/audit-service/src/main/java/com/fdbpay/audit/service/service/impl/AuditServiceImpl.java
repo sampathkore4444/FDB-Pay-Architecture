@@ -59,6 +59,12 @@ public class AuditServiceImpl implements AuditService {
     }
 
     @Override
+    public Page<AuditEntryResponse> getAllAuditLogs(int page, int size) {
+        Page<AuditEntry> entries = auditEntryRepository.findAll(PageRequest.of(page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt")));
+        return entries.map(this::mapToResponse);
+    }
+
+    @Override
     public Page<AuditEntryResponse> getAuditLog(String actorId, int page, int size) {
         UUID actorUuid = UUID.fromString(actorId);
         Page<AuditEntry> entries = auditEntryRepository

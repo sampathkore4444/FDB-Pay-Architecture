@@ -16,6 +16,7 @@ import com.fdbpay.support.service.model.enums.SenderType;
 import com.fdbpay.support.service.model.enums.TicketPriority;
 import com.fdbpay.support.service.model.enums.TicketStatus;
 import com.fdbpay.support.service.repository.AccountManagerRepository;
+import com.fdbpay.support.service.repository.FaqRepository;
 import com.fdbpay.support.service.repository.SupportTicketRepository;
 import com.fdbpay.support.service.repository.TicketMessageRepository;
 import com.fdbpay.support.service.service.SupportService;
@@ -41,6 +42,7 @@ public class SupportServiceImpl implements SupportService {
     private final SupportTicketRepository ticketRepository;
     private final TicketMessageRepository messageRepository;
     private final AccountManagerRepository managerRepository;
+    private final FaqRepository faqRepository;
 
     @Override
     @Transactional
@@ -121,6 +123,16 @@ public class SupportServiceImpl implements SupportService {
 
         log.info("Message added to ticket: ticketId={}, senderType={}", ticketId, senderType);
         return mapMessageToResponse(message);
+    }
+
+    @Override
+    public Page<SupportTicketResponse> getAllTickets(int page, int size) {
+        Page<SupportTicket> tickets = ticketRepository
+                .findAll(PageRequest.of(page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt")));
+        return tickets.map(t -> {
+            long messageCount = messageRepository.findByTicketIdOrderByCreatedAtAsc(t.getId()).size();
+            return mapToResponse(t, (int) messageCount);
+        });
     }
 
     @Override
@@ -335,5 +347,18 @@ public class SupportServiceImpl implements SupportService {
                 .status(manager.getStatus())
                 .createdAt(manager.getCreatedAt())
                 .build();
+    }
+
+    @Override
+    public List<FaqResponse> getAllFaqs() {
+        return faqRepository.findAllByOrderBySortOrderAsc().stream()
+                .map(faq -> FaqResponse.builder()
+                        .id(faq.getId())
+                        .question(faq.getQuestion())
+                        .answer(faq.getAnswer())
+                        .category(faq.getCategory())
+                        .sortOrder(faq.getSortOrder())
+                        .build())
+                .toList();
     }
 }

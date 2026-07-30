@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -17,6 +19,16 @@ import java.util.UUID;
 public class CorporateController {
 
     private final CorporateService corporateService;
+
+    @GetMapping("/products")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getProducts() {
+        return ResponseEntity.ok(ApiResponse.success(List.of(
+                Map.of("id", "payroll", "name", "Payroll Management", "description", "Automated salary disbursement for employees"),
+                Map.of("id", "bulk-payment", "name", "Bulk Payments", "description", "Mass payments to multiple recipients"),
+                Map.of("id", "reconciliation", "name", "Reconciliation", "description", "Automated transaction reconciliation"),
+                Map.of("id", "api-integration", "name", "API Integration", "description", "Direct API access for custom integrations")
+        )));
+    }
 
     @PostMapping("/bulk-disburse")
     public ResponseEntity<ApiResponse<?>> initiateBulkDisbursement(

@@ -24,6 +24,8 @@ spring:
           uri: lb://transfer-service
           predicates:
             - Path=/v1/transfer/**
+          filters:
+            - StripPrefix=1
         - id: merchant-service
           uri: lb://merchant-service
           predicates:
@@ -40,58 +42,86 @@ spring:
           uri: lb://bill-payment-service
           predicates:
             - Path=/v1/bills/**
+          filters:
+            - StripPrefix=1
         - id: airtime-service
-          uri: lb://airtime-service
+          uri: lb://bill-payment-service
           predicates:
             - Path=/v1/airtime/**
+          filters:
+            - StripPrefix=1
         - id: agent-service
           uri: lb://agent-service
           predicates:
             - Path=/v1/agent/**
+          filters:
+            - StripPrefix=1
         - id: corporate-service
           uri: lb://corporate-service
           predicates:
             - Path=/v1/corp/**
+          filters:
+            - StripPrefix=1
         - id: settlement-service
           uri: lb://settlement-service
           predicates:
             - Path=/v1/settlements/**
+          filters:
+            - StripPrefix=1
         - id: dispute-service
           uri: lb://dispute-service
           predicates:
             - Path=/v1/disputes/**
+          filters:
+            - StripPrefix=1
         - id: audit-service
           uri: lb://audit-service
           predicates:
             - Path=/v1/audit/**
+          filters:
+            - StripPrefix=1
         - id: reporting-service
           uri: lb://reporting-service
           predicates:
             - Path=/v1/admin/**
+          filters:
+            - StripPrefix=1
         - id: kyc-service
           uri: lb://kyc-service
           predicates:
             - Path=/v1/kyc/**
+          filters:
+            - StripPrefix=1
         - id: notification-service
           uri: lb://notification-service
           predicates:
             - Path=/v1/notifications/**
+          filters:
+            - StripPrefix=1
         - id: fraud-risk-service
           uri: lb://fraud-risk-service
           predicates:
             - Path=/v1/fraud/**
+          filters:
+            - StripPrefix=1
         - id: remittance-service
           uri: lb://remittance-service
           predicates:
             - Path=/v1/remittance/**
+          filters:
+            - StripPrefix=1
         - id: promotions-service
           uri: lb://promotions-service
           predicates:
             - Path=/v1/promotions/**
+          filters:
+            - StripPrefix=1
         - id: support-service
           uri: lb://support-service
           predicates:
             - Path=/v1/support/**
+          filters:
+            - StripPrefix=1
         - id: wallet-service-savings
           uri: lb://wallet-service
           predicates:

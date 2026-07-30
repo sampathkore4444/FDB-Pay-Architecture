@@ -7,6 +7,7 @@ import com.fdbpay.settlement.service.dto.response.SettlementResponse;
 import com.fdbpay.settlement.service.dto.response.SettlementSummaryResponse;
 import org.springframework.data.domain.Page;
 
+import java.util.Map;
 import java.util.UUID;
 
 public interface SettlementService {
@@ -22,4 +23,6 @@ public interface SettlementService {
     SettlementSummaryResponse getSettlementSummary(UUID batchId);
 
     SettlementBatchResponse reconcile();
+
+    Map<String, Object> getOverallSummary();
 }

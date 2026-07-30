@@ -23,6 +23,18 @@ public class SupportController {
 
     private final SupportService supportService;
 
+    @GetMapping("/tickets")
+    public ApiResponse<Page<SupportTicketResponse>> getTickets(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(supportService.getAllTickets(page, size));
+    }
+
+    @GetMapping("/faqs")
+    public ApiResponse<List<FaqResponse>> getFaqs() {
+        return ApiResponse.success(supportService.getAllFaqs());
+    }
+
     @PostMapping("/tickets")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<SupportTicketResponse> createTicket(

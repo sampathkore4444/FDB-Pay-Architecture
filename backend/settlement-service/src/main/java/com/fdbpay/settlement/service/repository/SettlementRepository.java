@@ -41,4 +41,18 @@ public interface SettlementRepository extends JpaRepository<Settlement, UUID> {
 
     @Query("SELECT COALESCE(SUM(s.netAmount), 0) FROM Settlement s WHERE s.batchId = :batchId AND s.status = 'COMPLETED'")
     Long sumCompletedNetAmountByBatchId(@Param("batchId") UUID batchId);
+
+    long countByStatus(SettlementStatus status);
+
+    @Query("SELECT COALESCE(SUM(s.netAmount), 0) FROM Settlement s")
+    Long sumAllNetAmount();
+
+    @Query("SELECT COALESCE(SUM(s.grossAmount), 0) FROM Settlement s")
+    Long sumAllGrossAmount();
+
+    @Query("SELECT COALESCE(SUM(s.fees), 0) FROM Settlement s")
+    Long sumAllFees();
+
+    @Query("SELECT COUNT(DISTINCT s.merchantId) FROM Settlement s")
+    int countDistinctMerchants();
 }

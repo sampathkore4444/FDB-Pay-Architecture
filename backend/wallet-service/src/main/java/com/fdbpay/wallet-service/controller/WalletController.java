@@ -1,6 +1,7 @@
 package com.fdbpay.wallet.service.controller;
 
 import com.fdbpay.shared.dto.ApiResponse;
+import com.fdbpay.wallet.service.dto.request.CreateWalletRequest;
 import com.fdbpay.wallet.service.dto.request.TopUpRequest;
 import com.fdbpay.wallet.service.dto.request.WithdrawRequest;
 import com.fdbpay.wallet.service.dto.response.LedgerEntryResponse;
@@ -28,8 +29,22 @@ public class WalletController {
         return ApiResponse.success(walletService.getWallet(userId));
     }
 
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<WalletResponse> createWallet(@Valid @RequestBody CreateWalletRequest request) {
+        return ApiResponse.success(walletService.createWallet(request.getUserId()));
+    }
+
     @GetMapping("/ledger")
     public ApiResponse<Page<LedgerEntryResponse>> getLedger(
+            @RequestParam UUID userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(walletService.getLedger(userId, PageRequest.of(page, size)));
+    }
+
+    @GetMapping("/transactions")
+    public ApiResponse<Page<LedgerEntryResponse>> getTransactions(
             @RequestParam UUID userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {

@@ -15,6 +15,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Map;
+
 @RestController
 @RequestMapping("/fraud")
 @RequiredArgsConstructor
@@ -22,6 +25,25 @@ import org.springframework.web.bind.annotation.*;
 public class FraudRiskController {
 
     private final FraudRiskService fraudRiskService;
+
+    @GetMapping("/rules")
+    @Operation(summary = "Get fraud detection rules")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getRules() {
+        return ResponseEntity.ok(ApiResponse.success(List.of(
+                Map.of("id", "high-amount", "name", "High Amount Threshold", "threshold", 20_000_000, "severity", "HIGH"),
+                Map.of("id", "velocity-check", "name", "Transaction Velocity", "maxPerMinute", 10, "severity", "MEDIUM"),
+                Map.of("id", "self-transfer", "name", "Self-Transfer Detection", "enabled", true, "severity", "HIGH"),
+                Map.of("id", "sanction-screening", "name", "Sanctions Screening", "enabled", true, "severity", "CRITICAL")
+        )));
+    }
+
+    @GetMapping("/transactions")
+    @Operation(summary = "Get flagged transactions")
+    public ResponseEntity<ApiResponse<Page<FraudAlertResponse>>> getFlaggedTransactions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(fraudRiskService.getAlerts(page, size)));
+    }
 
     @PostMapping("/evaluate")
     @Operation(summary = "Evaluate a transaction for fraud risk")

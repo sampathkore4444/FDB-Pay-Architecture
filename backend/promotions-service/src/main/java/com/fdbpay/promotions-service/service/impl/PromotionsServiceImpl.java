@@ -74,7 +74,7 @@ public class PromotionsServiceImpl implements PromotionsService {
         OffsetDateTime now = OffsetDateTime.now();
         return promotionRepository.findByStatusAndStartDateBeforeAndEndDateAfter(PromotionStatus.ACTIVE, now, now)
                 .stream()
-                .filter(p -> p.getMerchantId() == null || p.getMerchantId().equals(userId))
+                .filter(p -> p.getMerchantId() == null || (userId != null && p.getMerchantId().equals(userId)))
                 .map(this::mapToResponse)
                 .toList();
     }

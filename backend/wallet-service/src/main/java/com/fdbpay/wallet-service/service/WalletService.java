@@ -14,6 +14,8 @@ public interface WalletService {
 
     WalletResponse getWallet(UUID userId);
 
+    WalletResponse createWallet(UUID userId);
+
     WalletResponse topUp(UUID userId, TopUpRequest request);
 
     WalletResponse withdraw(UUID userId, Long amount, String idempotencyKey);

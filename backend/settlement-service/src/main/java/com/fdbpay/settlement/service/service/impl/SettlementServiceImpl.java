@@ -243,6 +243,27 @@ public class SettlementServiceImpl implements SettlementService {
     }
 
     @Override
+    public Map<String, Object> getOverallSummary() {
+        long pending = settlementRepository.countByStatus(SettlementStatus.PENDING);
+        long completed = settlementRepository.countByStatus(SettlementStatus.COMPLETED);
+        long failed = settlementRepository.countByStatus(SettlementStatus.FAILED);
+        Long totalNet = settlementRepository.sumAllNetAmount();
+        Long totalFees = settlementRepository.sumAllFees();
+        Long totalGross = settlementRepository.sumAllGrossAmount();
+        int merchantCount = settlementRepository.countDistinctMerchants();
+
+        return Map.of(
+                "pending", pending,
+                "completed", completed,
+                "failed", failed,
+                "totalGrossAmount", totalGross,
+                "totalFees", totalFees,
+                "totalNetAmount", totalNet,
+                "merchantCount", merchantCount
+        );
+    }
+
+    @Override
     @Transactional
     public SettlementBatchResponse reconcile() {
         log.info("Starting settlement reconciliation");

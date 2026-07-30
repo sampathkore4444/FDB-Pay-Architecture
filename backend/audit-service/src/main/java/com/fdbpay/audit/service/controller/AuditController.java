@@ -22,6 +22,13 @@ public class AuditController {
 
     private final AuditService auditService;
 
+    @GetMapping("/logs")
+    public ApiResponse<Page<AuditEntryResponse>> getLogs(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(auditService.getAllAuditLogs(page, size));
+    }
+
     @PostMapping("/log")
     public ApiResponse<AuditEntryResponse> logAction(@RequestBody AuditLogRequest request) {
         return ApiResponse.success(auditService.logAction(request));

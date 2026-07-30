@@ -10,6 +10,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -18,6 +19,14 @@ import java.util.UUID;
 public class AgentController {
 
     private final AgentService agentService;
+
+    @GetMapping("/commission-rates")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getCommissionRates() {
+        return ResponseEntity.ok(ApiResponse.success(Map.of(
+                "cashInRate", "0.5%",
+                "cashOutRate", "0.3%"
+        )));
+    }
 
     @GetMapping("/account")
     public ResponseEntity<ApiResponse<?>> getAccount(@RequestHeader("X-User-Id") UUID userId) {

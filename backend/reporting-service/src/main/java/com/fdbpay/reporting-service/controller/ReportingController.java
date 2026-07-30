@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/admin")
@@ -21,6 +22,19 @@ import java.time.LocalDate;
 public class ReportingController {
 
     private final ReportingService reportingService;
+
+    @GetMapping("/reports")
+    @Operation(summary = "Get paginated reports")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getReports(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        DashboardMetrics metrics = reportingService.getDashboardMetrics();
+        return ResponseEntity.ok(ApiResponse.success(Map.of(
+                "metrics", metrics,
+                "page", page,
+                "size", size
+        )));
+    }
 
     @GetMapping("/dashboard")
     @Operation(summary = "Get dashboard metrics")

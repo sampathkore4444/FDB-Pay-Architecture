@@ -23,6 +23,16 @@ public class KycController {
 
     private final KycService kycService;
 
+    @GetMapping("/status")
+    public ResponseEntity<ApiResponse<KycStatusResponse>> getStatus(@RequestParam UUID userId) {
+        return ResponseEntity.ok(ApiResponse.success(kycService.getKycStatus(userId)));
+    }
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<KycStatusResponse>> getKyc(@RequestParam UUID userId) {
+        return ResponseEntity.ok(ApiResponse.success(kycService.getKycStatus(userId)));
+    }
+
     @PostMapping("/submit")
     @Operation(summary = "Submit KYC documents for verification")
     public ResponseEntity<ApiResponse<KycStatusResponse>> submitDocuments(

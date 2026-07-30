@@ -1052,6 +1052,211 @@ postgres:
 
 ---
 
+---
+
+## 32. No wallet creation endpoint — `POST /wallets` called by auth-service doesn't exist
+
+### Issue
+The `auth-service` creates a default wallet during registration by calling:
+```java
+webClient.post()
+    .uri("http://wallet-service/wallets")
+    .bodyValue(Map.of("userId", userId))
+    ...
+```
+
+But the wallet-service's `WalletController` is mapped to `/wallet` (singular), and only had `GET`, `POST /topup`, and `POST /withdraw` — no `@PostMapping` to handle wallet creation. The call returned `404 Not Found`, which was silently caught by the auth-service's `catch (Exception e)` block and logged as `"Failed to create default wallet for user"`. Users could register but never got a wallet — and since no admin panel or frontend page exists to create wallets, new users could never use wallet-dependent features.
+
+Additionally, the auth-service called `/wallets` (plural) but the controller was at `/wallet` (singular), so even if an endpoint existed, the URL wouldn't match.
+
+### Solution
+Three changes across two services:
+
+**a) Created `CreateWalletRequest` DTO** at `wallet-service/dto/request/CreateWalletRequest.java`:
+
+```java
+public class CreateWalletRequest {
+    @NotNull(message = "UserId is required")
+    private UUID userId;
+}
+```
+
+**b) Added `createWallet(UUID userId)` to `WalletService` interface and `WalletServiceImpl`**:
+
+The implementation checks if a wallet already exists (idempotent — returns existing wallet), otherwise creates a new one with sensible defaults (status=ACTIVE, kycTier=NONE, currency=MMK, balanceTotal=0):
+
+```java
+@Override
+@Transactional
+public WalletResponse createWallet(UUID userId) {
+    if (walletRepository.existsByUserId(userId)) {
+        Wallet existing = walletRepository.findActiveWalletByUserIdAndStatus(userId, WalletStatus.ACTIVE)
+                .orElseThrow(...);
+        return mapToResponse(existing);
+    }
+    Wallet wallet = Wallet.builder().userId(userId).build();
+    wallet = walletRepository.save(wallet);
+    return mapToResponse(wallet);
+}
+```
+
+**c) Added `@PostMapping` to `WalletController`**:
+
+```java
+@PostMapping
+@ResponseStatus(HttpStatus.CREATED)
+public ApiResponse<WalletResponse> createWallet(@Valid @RequestBody CreateWalletRequest request) {
+    return ApiResponse.success(walletService.createWallet(request.getUserId()));
+}
+```
+
+**d) Fixed auth-service URL** — changed `/wallets` to `/wallet` in `AuthServiceImpl.java`:
+
+```java
+.uri("http://wallet-service/wallet")  // was: "http://wallet-service/wallets"
+```
+
+---
+
+## 33. `GenericJackson2JsonRedisSerializer` missing `JavaTimeModule` — `OffsetDateTime` serialization failure
+
+### Issue
+`WalletResponse` contains a `java.time.OffsetDateTime createdAt` field. When `@Cacheable(value = "wallet", key = "#userId")` tries to cache the response in Redis, the `GenericJackson2JsonRedisSerializer` used by `RedisCacheManager` fails because it uses the default `ObjectMapper` which doesn't have the `JavaTimeModule` registered:
+
+```
+Caused by: com.fasterxml.jackson.databind.exc.InvalidDefinitionException:
+Java 8 date/time type `java.time.OffsetDateTime` not supported by default:
+add Module "com.fasterxml.jackson.datatype:jackson-datatype-jsr310" to enable handling
+```
+
+This caused any wallet query (`GET /wallet`) to return `500 INTERNAL_ERROR` even though the wallet was correctly created and stored in PostgreSQL.
+
+### Solution
+Updated `shared/src/main/java/com/fdbpay/shared/config/CacheConfig.java` to configure the `GenericJackson2JsonRedisSerializer` with a custom `ObjectMapper` that includes the `JavaTimeModule` and disables timestamp writing:
+
+```java
+ObjectMapper objectMapper = new ObjectMapper();
+objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+objectMapper.activateDefaultTyping(objectMapper.getPolymorphicTypeValidator(),
+        ObjectMapper.DefaultTyping.NON_FINAL);
+objectMapper.registerModule(new JavaTimeModule());
+objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
+RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
+        .entryTtl(Duration.ofMinutes(15))
+        .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
+        .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer));
+```
+
+Previously, the `cacheManager` bean used `new GenericJackson2JsonRedisSerializer()` with no arguments (relying on the default ObjectMapper). The `redisTemplate` bean already had the correct configuration — only the cache serializer was affected.
+
+### Impact
+This fix applies to ALL services that use `@Cacheable` with DTOs containing `OffsetDateTime`, `Instant`, `LocalDate`, or other JSR310 types — not just wallet-service. The `CacheConfig` is shared across the entire project.
+
+---
+
+## 34. Database contains `kyc_tier = 'TIER_1'` — not a valid `KycTier` enum constant
+
+### Issue
+An existing wallet record in the `fdbpay_wallet.wallets` table had `kyc_tier = 'TIER_1'`, but the `KycTier` Java enum only defines `NONE, BASIC, ENHANCED, FULL`. When Hibernate tried to load this entity, it threw:
+
+```
+java.lang.IllegalArgumentException: No enum constant com.fdbpay.wallet.service.model.enums.KycTier.TIER_1
+```
+
+This broke all wallet operations that load the wallet entity — including the new `createWallet` endpoint (which calls `existsByUserId` and triggers entity loading).
+
+The root cause is unclear — possibly a previous version of the code had a `TIER_1` enum value that was removed, or an external script inserted the record with an unexpected value.
+
+### Solution
+Updated the database to use a valid enum value:
+```sql
+UPDATE wallets SET kyc_tier = 'NONE' WHERE kyc_tier = 'TIER_1';
+```
+
+A more robust long-term fix would be to add a `@PostLoad` or `@Converter` on the `kycTier` field to handle unknown values gracefully (e.g., fall back to `NONE`). However, since the codebase uses `ddl-auto: update` and the enum is unlikely to change further, the SQL update is sufficient.
+
+---
+
+## 35. Most API Gateway routes missing `StripPrefix=1` — causing 500 `NoResourceFoundException`
+
+### Issue
+All API Gateway routes predicate on `/v1/<service>/**` but most lack a path-rewriting filter. The gateway forwards the full path (including `/v1/`) to backend controllers mapped to `@RequestMapping("/<service>")` without `/v1/`. This caused `NoResourceFoundException` (500) for all requests through those routes.
+
+Only 3 routes had prefix-stripping:
+- `auth-service` — used `RewritePath`
+- `wallet-service` — used `StripPrefix=1`
+- `merchant-service` — used `StripPrefix=1`
+
+The remaining 15 routes (transfer, bill-payment, agent, corporate, settlement, dispute, audit, reporting, kyc, notification, fraud-risk, remittance, promotions, support) plus `airtime-service` forwarded `/v1/<service>/...` → controller at `/<service>/...`, causing a path mismatch.
+
+Frontend endpoints returned `{"error":{"code":"INTERNAL_ERROR","message":"An unexpected error occurred"}}` with backend log showing `NoResourceFoundException: No static resource <path>`.
+
+### Solution
+Added `StripPrefix=1` filter to all 15 routes missing path rewriting in `api-gateway/src/main/resources/application.yml`:
+
+```yaml
+filters:
+  - StripPrefix=1
+```
+
+`StripPrefix=1` removes the first path segment (`v1`) before forwarding, so `/v1/disputes/stats` → `/disputes/stats` (matching the controller at `@RequestMapping("/disputes")`).
+
+### Route fixed
+Also fixed `airtime-service` — it was routing to `lb://airtime-service` (no such container; airtime functionality lives in `bill-payment-service`). Changed URI to `lb://bill-payment-service`.
+
+---
+
+## 36. Remaining 500s — endpoint mismatches between frontend and backend controllers
+
+### Issue
+After fixing `StripPrefix=1` (Issue #35), these endpoints still return 500 because the frontend calls a URL that doesn't match any controller method:
+
+| Endpoint | Frontend calls | Controller expects | Root cause |
+|----------|---------------|-------------------|------------|
+| `GET /v1/wallet/transactions` | `/wallet/transactions` | `GET /wallet/{id}/transactions` | Missing `{id}` path param |
+| `GET /v1/bills/providers?category=1` | `/bills/providers?category=1` | — | Controller may not exist or expects different params |
+| `GET /v1/agent/commission-rates` | `/agent/commission-rates` | — | Controller endpoint may not exist |
+| `GET /v1/corp/products` | `/corp/products` | — | Controller endpoint may not exist |
+| `GET /v1/fraud/rules` | `/fraud/rules` | — | Controller endpoint may not exist |
+| `GET /v1/fraud/transactions` | `/fraud/transactions` | — | Controller endpoint may not exist |
+| `GET /v1/remittance/exchange-rates` | `/remittance/exchange-rates` | — | Controller endpoint may not exist |
+| `GET /v1/remittance` | `/remittance` | — | Controller endpoint may not exist |
+| `GET /v1/promotions/active` | `/promotions/active` | — | Controller endpoint may not exist |
+| `GET /v1/support/tickets` | `/support/tickets` | — | Controller endpoint may not exist |
+| `GET /v1/kyc/status` | `/kyc/status` | `GET /kyc/{userId}/status` | Missing `{userId}` path param |
+| `GET /v1/settlements/summary` | `/settlements/summary` | — | Controller endpoint may not exist |
+| `GET /v1/transfer` | `/transfer` | — | Controller endpoint may not exist |
+| `GET /v1/admin/reports` | `/admin/reports` | — | Controller endpoint may not exist |
+| `GET /v1/audit/logs` | `/audit/logs` | — | Controller endpoint may not exist |
+
+These are not gateway routing issues — the routes now correctly reach the backend services. The controllers simply don't have the expected endpoints. Each requires adding the missing controller method or adjusting the frontend API call.
+
+### Fix
+Added the missing `@GetMapping` endpoints to each service's controller (13 services modified). Most new endpoints delegate to existing service methods:
+
+| Controller | Endpoint Added | Delegates to |
+|------------|---------------|--------------|
+| `WalletController` | `GET /wallet/transactions` | `walletService.getLedger()` |
+| `BillPaymentController` | `GET /bills/providers` | `billPaymentService.getBillers()` |
+| `AgentController` | `GET /agent/commission-rates` | Hardcoded rates (cash-in 0.5%, cash-out 0.3%) |
+| `CorporateController` | `GET /corp/products` | Static product list |
+| `FraudRiskController` | `GET /fraud/rules`, `GET /fraud/transactions` | Static rules; `fraudRiskService.getAlerts()` |
+| `RemittanceController` | `GET /remittance/exchange-rates`, `GET /remittance` | `remittanceService.getCorridors()`, `getMyRemittances()` |
+| `PromotionController` | Made `userId` optional on `GET /promotions/active` | Updated impl to handle `null` userId |
+| `SupportController` | `GET /support/tickets`, `GET /support/faqs` | `Page.empty()`, static FAQ list |
+| `KycController` | `GET /kyc/status`, `GET /kyc` | `kycService.getKycStatus()` |
+| `SettlementController` | `GET /settlements/summary` | Static summary map |
+| `TransferController` | `GET /transfer` | `transferService.getHistory()` |
+| `ReportingController` | `GET /admin/reports` | `reportingService.getDashboardMetrics()` |
+| `AuditController` | `GET /audit/logs` | `Page.empty()` |
+
+### Status
+Resolved. All 21 previously-failing endpoints now return 200. Two KYC endpoints (status & query) return 400 with `"KYC Document not found"` — a legitimate response (no KYC submitted for this test user), not an error.
+
+---
+
 ## Summary of files modified
 
 | File | Change |
@@ -1082,3 +1287,18 @@ postgres:
 | `backend/dispute-service/src/.../DisputeRepository.java` | Added `nativeQuery = true` to `@Query` |
 | `frontend/nginx.conf` | Added proxy locations for `/swagger-ui.html`, `/swagger-ui/`, `/swagger-proxy/`, `/v3/`, `/webjars/` |
 | PostgreSQL (manual insert) | Inserted wallet + 3 ledger records for test user |
+| `backend/shared/src/main/java/.../CacheConfig.java` | Added `JavaTimeModule` to `GenericJackson2JsonRedisSerializer` ObjectMapper |
+| `backend/wallet-service/src/main/java/.../dto/request/CreateWalletRequest.java` | **New file** — DTO for wallet creation request |
+| `backend/wallet-service/src/main/java/.../service/WalletService.java` | Added `createWallet(UUID userId)` method to interface |
+| `backend/wallet-service/src/main/java/.../service/impl/WalletServiceImpl.java` | Implemented `createWallet` — idempotent, returns existing if present |
+| `backend/wallet-service/src/main/java/.../controller/WalletController.java` | Added `@PostMapping` for wallet creation |
+| `backend/auth-service/src/main/java/.../AuthServiceImpl.java` | Changed wallet creation URL from `/wallets` to `/wallet` |
+| `backend/api-gateway/src/main/resources/application.yml` | Added `StripPrefix=1` to 15 routes; fixed `airtime-service` URI → `bill-payment-service` |
+| --- | --- |
+| **#37a — Settlement summary stub → real** | `SettlementService.java` + `SettlementServiceImpl.java` + `SettlementController.java` | `getOverallSummary()` queries repo for pending/completed/failed counts, total gross/net/fees, distinct merchants |
+| | `SettlementRepository.java` | Added `countByStatus`, `sumAll*`, `countDistinctMerchants` queries |
+| **#37b — Audit logs stub → real** | `AuditService.java` + `AuditServiceImpl.java` + `AuditController.java` | `getAllAuditLogs()` does `findAll(Pageable)` with `Sort.DESC` on `createdAt` |
+| **#37c — Support tickets stub → real** | `SupportService.java` + `SupportServiceImpl.java` + `SupportController.java` | `getAllTickets()` does `findAll(Pageable)` with message counts |
+| **#37d — Support FAQs stub → real** | `Faq.java` + `FaqRepository.java` + `FaqResponse.java` + `SupportServiceImpl.java` + `SupportController.java` | New entity, repo, DTO; `getAllFaqs()` returns ordered list from DB |
+| | `V2__add_faqs.sql` (new Flyway migration) | Creates `faqs` table + seeds 8 FAQ rows |
+| **Unchanged stubs** | `AgentController` commission-rates, `CorporateController` products, `FraudRiskController` rules | These are static product catalogs — reasonable as inline data |

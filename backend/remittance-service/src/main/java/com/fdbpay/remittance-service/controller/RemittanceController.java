@@ -14,7 +14,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/remittance")
@@ -26,6 +28,26 @@ public class RemittanceController {
     @GetMapping("/corridors")
     public ApiResponse<List<RemittanceCorridorResponse>> getCorridors() {
         return ApiResponse.success(remittanceService.getCorridors());
+    }
+
+    @GetMapping("/exchange-rates")
+    public ApiResponse<List<Map<String, Object>>> getExchangeRates() {
+        List<RemittanceCorridorResponse> corridors = remittanceService.getCorridors();
+        List<Map<String, Object>> rates = corridors.stream().map(c -> Map.<String, Object>of(
+                "from", c.getSourceCurrency(),
+                "to", c.getDestCurrency(),
+                "rate", c.getExchangeRate(),
+                "corridor", c.getCode()
+        )).collect(Collectors.toList());
+        return ApiResponse.success(rates);
+    }
+
+    @GetMapping
+    public ApiResponse<Page<RemittanceResponse>> getRemittances(
+            @RequestParam UUID userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(remittanceService.getMyRemittances(userId, page, size));
     }
 
     @PostMapping("/quote")

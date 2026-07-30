@@ -11,6 +11,8 @@ public interface AuditService {
 
     AuditEntryResponse logAction(AuditLogRequest request);
 
+    Page<AuditEntryResponse> getAllAuditLogs(int page, int size);
+
     Page<AuditEntryResponse> getAuditLog(String actorId, int page, int size);
 
     Page<AuditEntryResponse> getResourceAuditLog(String resourceType, String resourceId, int page, int size);

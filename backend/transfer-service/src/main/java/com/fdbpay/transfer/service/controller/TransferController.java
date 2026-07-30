@@ -19,6 +19,14 @@ public class TransferController {
 
     private final TransferService transferService;
 
+    @GetMapping
+    public ApiResponse<Page<TransactionResponse>> getTransfers(
+            @RequestParam UUID userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(transferService.getHistory(userId, page, size));
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<TransactionResponse> initiateTransfer(

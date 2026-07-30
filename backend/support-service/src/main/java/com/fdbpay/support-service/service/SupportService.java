@@ -18,6 +18,8 @@ public interface SupportService {
 
     TicketMessageResponse addMessage(UUID ticketId, UUID userId, AddMessageRequest request);
 
+    Page<SupportTicketResponse> getAllTickets(int page, int size);
+
     Page<SupportTicketResponse> getMyTickets(UUID userId, int page, int size);
 
     Page<SupportTicketResponse> getManagerTickets(UUID managerId, int page, int size);
@@ -31,4 +33,6 @@ public interface SupportService {
     TicketStatsResponse getStats();
 
     List<AccountManagerResponse> getAvailableManagers();
+
+    List<FaqResponse> getAllFaqs();
 }

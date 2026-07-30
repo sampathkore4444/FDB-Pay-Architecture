@@ -30,7 +30,8 @@ public class PromotionController {
     }
 
     @GetMapping("/active")
-    public ApiResponse<List<PromotionResponse>> getActivePromotions(@RequestParam UUID userId) {
+    public ApiResponse<List<PromotionResponse>> getActivePromotions(
+            @RequestParam(required = false) UUID userId) {
         return ApiResponse.success(promotionsService.getActivePromotions(userId));
     }
 

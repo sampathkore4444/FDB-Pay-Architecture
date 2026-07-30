@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -19,6 +20,11 @@ import java.util.UUID;
 public class SettlementController {
 
     private final SettlementService settlementService;
+
+    @GetMapping("/summary")
+    public ApiResponse<Map<String, Object>> getSummary() {
+        return ApiResponse.success(settlementService.getOverallSummary());
+    }
 
     @PostMapping("/trigger")
     @ResponseStatus(HttpStatus.OK)

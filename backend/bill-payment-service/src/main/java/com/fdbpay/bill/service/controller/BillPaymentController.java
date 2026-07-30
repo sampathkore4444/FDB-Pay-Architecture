@@ -33,6 +33,12 @@ public class BillPaymentController {
         return ApiResponse.success(billPaymentService.getBillers(category));
     }
 
+    @GetMapping("/providers")
+    public ApiResponse<List<BillerResponse>> getProviders(
+            @RequestParam(required = false) String category) {
+        return ApiResponse.success(billPaymentService.getBillers(category));
+    }
+
     @PostMapping("/lookup")
     public ApiResponse<BillLookupResponse> lookupBill(
             @RequestParam UUID billerId,

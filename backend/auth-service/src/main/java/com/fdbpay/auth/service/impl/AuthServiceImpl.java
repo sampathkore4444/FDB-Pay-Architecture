@@ -266,7 +266,7 @@ public class AuthServiceImpl implements AuthService {
         try {
             webClientBuilder.build()
                     .post()
-                    .uri("http://wallet-service/wallets")
+                    .uri("http://wallet-service/wallet")
                     .bodyValue(Map.of("userId", userId))
                     .retrieve()
                     .toBodilessEntity()

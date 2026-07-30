@@ -65,6 +65,26 @@ public class WalletServiceImpl implements WalletService {
 
     @Override
     @Transactional
+    public WalletResponse createWallet(UUID userId) {
+        if (walletRepository.existsByUserId(userId)) {
+            Wallet existing = walletRepository.findActiveWalletByUserIdAndStatus(userId, WalletStatus.ACTIVE)
+                    .orElseThrow(() -> new BusinessException(ErrorCodes.DUPLICATE_TRANSACTION,
+                            "Wallet already exists for user: " + userId));
+            log.info("Wallet already exists for user {}, returning existing", userId);
+            return mapToResponse(existing);
+        }
+
+        Wallet wallet = Wallet.builder()
+                .userId(userId)
+                .build();
+        wallet = walletRepository.save(wallet);
+
+        log.info("Wallet created: userId={}, walletId={}", userId, wallet.getId());
+        return mapToResponse(wallet);
+    }
+
+    @Override
+    @Transactional
     @CacheEvict(value = "wallet", key = "#userId")
     public WalletResponse topUp(UUID userId, TopUpRequest request) {
         Wallet wallet = getActiveWalletByUserId(userId);
