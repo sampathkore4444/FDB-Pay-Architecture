@@ -1921,7 +1921,103 @@ This lets you see ALL 16 services' APIs from a single Swagger UI at `/swagger-ui
 
 ---
 
-## 13. Summary — Putting It All Together
+## 13. Why Each `.java` File Exists
+
+This section lists **every `.java` file** in `promotions-service` and explains its role, why it's required, and what happens if you omit it.
+
+### Application Entry Point
+
+| File | Why it's required | What happens without it |
+|------|-------------------|------------------------|
+| `PromotionsServiceApplication.java` | Contains `main()` method. `@SpringBootApplication` bootstraps all Spring beans, auto-configuration, and component scanning. `@EnableDiscoveryClient` registers with Eureka. | **No `.java` file means no JAR can be built.** This is the entry point the JVM calls via `java -jar`. Without it, nothing starts. |
+
+### Config Layer
+
+| File | Why it's required | What happens without it |
+|------|-------------------|------------------------|
+| `config/WebClientConfig.java` | Creates a `WebClient.Builder` bean annotated with `@LoadBalanced`. This is the **only place** that configures how this service makes HTTP calls to other services. Without `@LoadBalanced`, the Eureka service name (`wallet-service`) would fail to resolve because there's no DNS record for it. | Any HTTP call to another service (e.g., `wallet-service/wallet/credit` in `redeemCashback()`) would throw `UnknownHostException`. You'd have to hardcode IP addresses, which breaks in Docker and scaling. |
+
+### Controller Layer
+
+| File | Why it's required | What happens without it |
+|------|-------------------|------------------------|
+| `controller/PromotionController.java` | **The REST API layer.** Maps incoming HTTP requests to service method calls. Handles parameter extraction (`@RequestParam`, `@PathVariable`), request body deserialization (`@RequestBody`), validation triggering (`@Valid`), and HTTP status codes. Wraps results in `ApiResponse`. | Clients have no way to call the service. Without a controller, there are zero HTTP endpoints. The service compiles but is unreachable. |
+
+### Service Layer
+
+| File | Why it's required | What happens without it |
+|------|-------------------|------------------------|
+| `service/PromotionsService.java` | **The contract (interface).** Defines all business operations the service provides. Enables loose coupling — the controller depends on this interface, not the implementation. Enables Spring AOP proxies (`@Transactional`, `@Cacheable` work on interfaces). Enables mocking in unit tests. | Without the interface, the controller would depend directly on the implementation class. This makes it impossible to swap implementations, harder to test, and prevents Spring from creating proper AOP proxies (JDK dynamic proxies require an interface). |
+| `service/impl/PromotionsServiceImpl.java` | **The business logic implementation.** Contains all logic: validation, discount calculation, database operations, inter-service calls. `@Transactional` ensures DB operations are atomic. Orchestrates the 4 repositories and WebClient. | Without this file, the service interface has no implementation. Spring would fail at startup with `NoSuchBeanDefinitionException` — no bean of type `PromotionsService` exists. |
+
+### Model Layer (JPA Entities)
+
+| File | Why it's required | What happens without it |
+|------|-------------------|------------------------|
+| `model/Promotion.java` | **Core domain entity.** Maps to the `promotions` database table. Every promotion CRUD operation needs this class to read/write rows. Hibernate uses it for INSERT, SELECT, UPDATE queries. Without it, `PromotionRepository` cannot function. | `PromotionRepository` (which extends `JpaRepository<Promotion, UUID>`) would fail to compile — the generic type `Promotion` doesn't exist. No promotions can be stored or retrieved. |
+| `model/PromotionUsage.java` | **Tracks usage history.** Maps to `promotion_usages`. Records which user used which promotion on which transaction, along with discount/cashback amounts. Required for enforcing `maxUsagePerUser` and `maxUsageTotal` limits. | The `countByUserIdAndPromotionId()` query in `PromotionUsageRepository` would fail. The usage limit enforcement in `validatePromoCode()` would have to be removed or done without persistence (losing accuracy after service restart). |
+| `model/CashbackWallet.java` | **Per-user cashback balance.** Maps to `cashback_wallets`. Tracks earned, redeemed, and current balance for each user. Without it, cashback could not be accumulated or tracked. | The `redeemCashback()` method checks `wallet.getBalance()` — without this entity, there's no way to know how much cashback a user has. Cashback redemptions would be impossible. |
+| `model/CashbackTransaction.java` | **Audit trail for cashback.** Maps to `cashback_transactions`. Records every cashback earn/redeem/expire event. Required for showing the user their cashback history and for auditing. | Without it, users could not see their cashback history. Auditors could not verify cashback was correctly calculated. The `CashbackTransactionRepository` would fail to compile. |
+
+### Enums
+
+| File | Why it's required | What happens without it |
+|------|-------------------|------------------------|
+| `model/enums/PromotionType.java` | Defines the valid promotion types: `FIXED_DISCOUNT`, `PERCENTAGE_DISCOUNT`, `CASHBACK`, `BOGO`, `COUPON_CODE`. Used in the `calculateDiscount()` switch expression to determine how to compute the discount. | The `Promotion.type` field (annotated `@Enumerated(EnumType.STRING)`) needs an enum type. Without it, you'd need to use a raw `String` field, losing type safety — you could accidentally set `type = "pizza"` at compile time. The switch expression in `calculateDiscount()` would be impossible. |
+| `model/enums/PromotionStatus.java` | Defines lifecycle states: `DRAFT`, `ACTIVE`, `PAUSED`, `EXPIRED`. Used in queries (`findByStatus`) and validation (`promotion.getStatus() != ACTIVE`). | Same as above — you'd use a raw `String`. A typo like `"ACTIVE"` vs `"ACTVE"` would silently match zero rows in queries. |
+| `model/enums/FundingType.java` | Defines who funds the promotion: `MERCHANT` or `BANK`. Required field in `CreatePromotionRequest`. | The `@NotNull FundingType fundingType` field in the request DTO would have no type. Validation would need custom string checking. |
+| `model/enums/CashbackTxnType.java` | Defines cashback transaction types: `EARNED`, `REDEEMED`, `EXPIRED`. Used in `CashbackTransaction.type` field. | Same type-safety issue as other enums. The consumer logic that creates `EARNED` transactions could accidentally use an invalid value. |
+
+### DTO Layer (Request)
+
+| File | Why it's required | What happens without it |
+|------|-------------------|------------------------|
+| `dto/request/CreatePromotionRequest.java` | Defines the JSON structure for `POST /promotions`. Carries `@NotBlank`, `@NotNull`, `@Positive` validation annotations that Spring validates at the controller boundary. | The `createPromotion()` controller method would need to accept raw `Map<String, Object>` and manually validate and extract every field. More code, more bugs, no compile-time safety. |
+| `dto/request/ApplyPromotionRequest.java` | Defines JSON structure for `POST /promotions/apply`. Contains `promoCode` and `transactionAmount` with validation. | Same as above — manual extraction from `Map`. |
+| `dto/request/RedeemCashbackRequest.java` | Defines JSON structure for `POST /promotions/cashback-redeem`. Contains `amount` with `@Positive`. | Same as above. |
+
+### DTO Layer (Response)
+
+| File | Why it's required | What happens without it |
+|------|-------------------|------------------------|
+| `dto/response/PromotionResponse.java` | Defines the JSON shape of a promotion returned to the client. Contains **computed fields** (`remainingUses`, `isActive`) that don't exist in the `Promotion` entity. Without this DTO, you'd either expose JPA-internal fields or would need to strip them manually from every response. | Returning the `Promotion` entity directly would expose `createdAt`, `updatedAt`, and all JPA fields in the JSON. Clients would see internal structure. Computed fields like `isActive` couldn't be added. |
+| `dto/response/PromotionUsageResponse.java` | Defines JSON shape for promotion usage records. Isolates API contract from entity structure. | Same leaky-abstraction problem. |
+| `dto/response/PromotionValidationResponse.java` | Defines JSON structure for promo code validation result (`valid`, `discount`, `message`). This is a **computed result** — it doesn't map to any database table. | Without this DTO, you'd return a raw `Map<String, Object>` with no type safety or documentation. |
+| `dto/response/CashbackWalletResponse.java` | Defines JSON shape of cashback wallet. Contains only fields relevant to the client (not internal DB fields). | Same leaky-abstraction problem. |
+| `dto/response/CashbackTransactionResponse.java` | Defines JSON shape of cashback transaction history. Used if you add a "view cashback history" endpoint later. | Without it, the endpoint would return entity objects with internal fields exposed. |
+
+### Repository Layer
+
+| File | Why it's required | What happens without it |
+|------|-------------------|------------------------|
+| `repository/PromotionRepository.java` | **The data access object for promotions.** Extends `JpaRepository<Promotion, UUID>` which provides `save()`, `findById()`, `findAll()`, `deleteById()` automatically. Also declares custom query methods: `findByStatus()`, `findByPromoCode()`, `findByStatusAndStartDateBeforeAndEndDateAfter()`. | The service layer has no way to read/write promotions from the database. All promotion operations would fail. |
+| `repository/PromotionUsageRepository.java` | Data access for usage tracking. Provides `countByUserIdAndPromotionId()` via `@Query` — a custom JPQL query that counts rows instead of fetching them (more efficient for limit checking). | The per-user usage limit check in `validatePromoCode()` would need to fetch all rows and count them in Java, which is slower and uses more memory. |
+| `repository/CashbackWalletRepository.java` | Data access for cashback wallets. Provides `findByUserId()` which returns `Optional<CashbackWallet>` — either the existing wallet or empty (to create a new one). | Without it, the service can't look up or create cashback wallets. Cashback credits and redemptions would be impossible. |
+| `repository/CashbackTransactionRepository.java` | Data access for cashback audit trail. Provides paginated query `findByCashbackWalletIdOrderByCreatedAtDesc()`. | Without it, there's no way to query the cashback transaction history for display or audit. |
+
+### Kafka Consumer Layer
+
+| File | Why it's required | What happens without it |
+|------|-------------------|------------------------|
+| `consumer/PromotionEventConsumer.java` | **Listens to `txn.completed` Kafka topic.** When another service publishes a transaction completion event, this consumer auto-applies cashback promotions. This is how the service reacts to events **without the caller knowing about promotions at all**. | Cashback would never be auto-applied. Users would have to manually apply promotions (which most won't do). The entire "earn cashback automatically when you transact" feature would be missing. |
+
+### What each file says about your architecture
+
+| If you have this file... | It means your service needs to... |
+|--------------------------|----------------------------------|
+| `Application.java` | Start up (always required) |
+| `config/*.java` | Configure some infrastructure (WebClient, Redis, security, etc.) |
+| `controller/*.java` | Expose REST endpoints (always required for a REST API service) |
+| `service/*Service.java` | Define a business contract (always required) |
+| `service/impl/*ServiceImpl.java` | Implement business logic (always required) |
+| `model/*.java` | Persist data in a database |
+| `model/enums/*.java` | Use constrained string values (type-safe alternatives to raw strings) |
+| `dto/request/*.java` | Accept structured input with validation |
+| `dto/response/*.java` | Return structured output without exposing internals |
+| `repository/*.java` | Query the database via Spring Data JPA |
+| `consumer/*.java` | React to events from other services asynchronously |
+
+## 14. Summary — Putting It All Together
 
 Here's the complete lifecycle of a request through the promotions-service:
 
