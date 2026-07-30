@@ -2017,7 +2017,163 @@ This section lists **every `.java` file** in `promotions-service` and explains i
 | `repository/*.java` | Query the database via Spring Data JPA |
 | `consumer/*.java` | React to events from other services asynchronously |
 
-## 14. Summary — Putting It All Together
+## 14. Complete Annotation Reference
+
+Every annotation used in `promotions-service` (and the broader FDB Pay project), grouped by layer, with real-world scenarios.
+
+### 14a. Spring Boot — Application Bootstrap
+
+| Annotation | Where used | What it does | Real-world scenario |
+|-----------|-----------|-------------|-------------------|
+| `@SpringBootApplication` | `PromotionsServiceApplication.java` | Combines `@Configuration` + `@EnableAutoConfiguration` + `@ComponentScan`. Tells Spring: "scan this package and all sub-packages for beans, configure Tomcat automatically, and enable auto-configuration based on classpath dependencies." | You deploy 20 microservices. Each one has this annotation on its main class. Without it, each service would need to manually configure Tomcat, Jackson, Hibernate, etc. — 1000+ lines of XML. With it, Spring Boot auto-configures everything based on the JARs on the classpath. |
+| `@EnableDiscoveryClient` | `PromotionsServiceApplication.java` | Registers this service with Eureka at startup. Publishes its IP, port, and service name (`promotions-service`). Sends heartbeats every 30 seconds. De-registers on graceful shutdown. | Your `promotions-service` instance starts on `192.168.1.5:8096`. Eureka now knows about it. When the API gateway routes `lb://promotions-service`, Eureka says "that's at 192.168.1.5:8096". Without this, no other service can find `promotions-service` by name. |
+
+### 14b. Spring Stereotypes — Bean Definitions
+
+| Annotation | Where used | What it does | Real-world scenario |
+|-----------|-----------|-------------|-------------------|
+| `@Configuration` | `WebClientConfig.java` | Marks a class as a source of bean definitions. Methods annotated with `@Bean` produce Spring-managed objects. Think of it as "this class configures something." | You need a pre-configured `WebClient.Builder` that all services can use. `@Configuration` on the class + `@Bean` on the method makes it available everywhere via dependency injection. |
+| `@Bean` | `WebClientConfig.java` (method level) | Tells Spring: "the return value of this method is a bean — manage its lifecycle and make it available for injection." The method name becomes the bean name. | `webClientBuilder()` returns a `WebClient.Builder`. Any service class with `private final WebClient.Builder webClientBuilder` gets this bean injected. Spring calls the method once (singleton) and caches the result. |
+| `@Service` | `PromotionsServiceImpl.java` | Specialization of `@Component`. Marks a class as a "Service" (business logic layer). Spring auto-detects it during component scanning. Adds semantic meaning: "this is where business logic lives." | The controller calls `promotionsService.applyPromotion(...)`. Spring injects the `PromotionsServiceImpl` instance (which is annotated `@Service`). Without this, the class is not a Spring bean and cannot be injected. |
+| `@Repository` | All repository interfaces | Specialization of `@Component`. Marks a class as a "Repository" (data access layer). Spring Data JPA's `JpaRepository` implementations are auto-detected. Also enables **persistence exception translation** — low-level `SQLException` is converted to Spring's `DataAccessException`. | Your `PromotionRepository.findById()` throws a `SQLException` because the DB connection dropped. `@Repository` ensures this is wrapped in Spring's `DataAccessException`, which your `GlobalExceptionHandler` can handle uniformly. Without it, you'd need to catch raw SQL exceptions everywhere. |
+| `@Component` | `PromotionEventConsumer.java` | Generic stereotype for any Spring-managed bean. Use when `@Service`, `@Repository`, or `@Controller` don't fit. | The Kafka consumer is not a service, repository, or controller — it's just a listener. `@Component` is the right fit. Spring picks it up and creates the bean. |
+| `@RequiredArgsConstructor` | All classes with dependencies | **Lombok annotation.** Generates a constructor with one parameter for every `final` field (or `@NonNull` field). Spring uses this constructor for dependency injection. Eliminates boilerplate constructor code. | Instead of writing a 5-parameter constructor manually: `public PromotionsServiceImpl(A, B, C, D, E) { this.a = a; this.b = b; ... }`, Lombok generates it for you. Add a new `final` field? Lombok updates the constructor automatically. If you forget `final`, the field isn't injected — Spring would leave it `null` and you'd get a `NullPointerException` at runtime. |
+
+### 14c. Spring Web — REST Layer
+
+| Annotation | Where used | What it does | Real-world scenario |
+|-----------|-----------|-------------|-------------------|
+| `@RestController` | `PromotionController.java` | Combination of `@Controller` + `@ResponseBody` on every method. Marks the class as a web controller where every method returns a JSON/XML response (not a view template like Thymeleaf). Spring registers the request mappings automatically. | You hit `GET /promotions/active`. Spring finds this controller, matches the method, and calls it. The returned `ApiResponse` is auto-serialized to JSON and written to the HTTP response body. Without `@RestController`, Spring would look for a view template called `active.html` and return 404. |
+| `@RequestMapping("/promotions")` | `PromotionController.java` (class level) | Base URL path for all methods in this controller. Every `@GetMapping`, `@PostMapping` etc. is relative to this path. | `@GetMapping("/active")` + class-level `@RequestMapping("/promotions")` = handles `GET /promotions/active`. Keeps the URL structure organized and avoids repeating "/promotions" on every method. |
+| `@GetMapping("/active")` | Controller methods | Shortcut for `@RequestMapping(method = RequestMethod.GET, path = "/active")`. Maps HTTP GET requests to the method. | User's phone calls `GET /v1/promotions/active?userId=123`. Gateway strips `/v1`, forwards to service as `GET /promotions/active?userId=123`. Spring routes to this method. |
+| `@PostMapping` | Controller methods | Shortcut for `@RequestMapping(method = RequestMethod.POST)`. Maps HTTP POST requests. | Merchant admin submits a "Create Promotion" form. The browser sends `POST /promotions` with a JSON body. Spring routes to `createPromotion()`. |
+| `@DeleteMapping("/{id}")` | Controller methods | Maps HTTP DELETE requests. The `{id}` is a path variable. | Admin clicks "Deactivate Promotion" on a promotion with ID `abc-123`. Browser sends `DELETE /promotions/abc-123`. Spring extracts the ID and calls `deactivatePromotion()`. |
+| `@PathVariable UUID id` | Method parameter | Extracts a value from the URL path. The name `id` matches `{id}` in the mapping. Spring converts the string to `UUID` automatically. | URL `/promotions/550e8400-e29b-41d4-a716-446655440000` → parameter `id` = `UUID("550e8400-...")`. Without this, you'd have to parse the URL manually from `HttpServletRequest`. |
+| `@RequestParam UUID userId` | Method parameter | Extracts a query parameter or form parameter. `required=false` makes it optional. `defaultValue` provides a fallback. | URL `/promotions/my?userId=abc-123&page=0&size=20` → `userId=UUID("abc-123")`, `page=0`, `size=20`. Without `@RequestParam`, you'd read `HttpServletRequest.getParameter("userId")` manually. |
+| `@RequestParam(defaultValue = "0") int page` | Method parameter | Query parameter with a default. If the client omits `?page=...`, it defaults to `0`. | Client calls `/promotions/my?userId=abc` (no page/size). `page=0`, `size=20` are used automatically. User gets the first page of results. |
+| `@RequestBody CreatePromotionRequest request` | Method parameter | Deserializes the HTTP request body (JSON) into the specified Java object. Jackson handles the conversion automatically. | Admin sends `{"title": "Summer Sale", "type": "PERCENTAGE_DISCOUNT", ...}`. Jackson reads the JSON, creates a `CreatePromotionRequest` object, and populates all fields matching the JSON keys. |
+| `@Valid` | Method parameter (before `@RequestBody` or `@RequestParam`) | Triggers Bean Validation. Spring inspects the object's validation annotations (`@NotBlank`, `@NotNull`, `@Positive`) and checks them. If any fail, the method is NOT called — instead, `MethodArgumentNotValidException` is thrown. | Admin submits a promotion with `title: ""` (blank) and `discountValue: -100`. The method never executes. The `GlobalExceptionHandler` returns `{"error": {"code": "VALIDATION_ERROR", "details": {"title": "Title is required", "discountValue": "Discount value must be positive"}}}`. The frontend shows inline error messages. |
+| `@ResponseStatus(HttpStatus.CREATED)` | Method-level (on `createPromotion()`) | Overrides the default HTTP status (200) with a specific status. | `POST /promotions` creates a new resource. The convention is to return `201 Created`. Without this, Spring returns `200 OK`, which is technically incorrect for a resource creation endpoint. |
+
+### 14d. Spring Data JPA — Persistence Layer
+
+| Annotation | Where used | What it does | Real-world scenario |
+|-----------|-----------|-------------|-------------------|
+| `@Entity` | All model classes | Marks the class as a JPA entity — it maps to a database table. Without this, Hibernate ignores the class. | `Promotion.java` maps to the `promotions` table. Hibernate knows to generate `INSERT INTO promotions (...) VALUES (...)` when you call `promotionRepository.save(promotion)`. |
+| `@Table(name = "promotions")` | Model classes | Overrides the default table name. Without this, Hibernate uses the class name (`Promotion` → `promotion` table). Since the migration SQL explicitly names the table `promotions` (plural), the annotation ensures they match. | The Flyway migration creates a table named `promotions`. The entity is named `Promotion`. If the annotation were omitted, Hibernate would look for a table named `promotion` (singular) and crash at startup with a schema-validation error. |
+| `@Id` | `UUID id` field | Marks the primary key field. Every JPA entity MUST have exactly one `@Id`. | Hibernate uses this to identify rows uniquely. For `findById(id)`, it generates `WHERE id = ?`. For `save()`, it checks if the ID exists (UPDATE) or not (INSERT). |
+| `@GeneratedValue(strategy = GenerationType.UUID)` | `UUID id` field | Tells Hibernate to generate the primary key value automatically using Hibernate's UUID generator. | When you call `promotionRepository.save(promotion)` without setting `id`, Hibernate generates one: `550e8400-e29b-41d4-a716-446655440000`. You never need to assign IDs manually. This UUID can be returned to the client immediately. |
+| `@Column(nullable = false, length = 200)` | Entity fields | Specifies column-level constraints. `nullable = false` → `NOT NULL` in SQL. `length = 200` → `VARCHAR(200)`. `unique = true` → `UNIQUE` constraint. `updatable = false` → field is set once, never updated. | `title` cannot be null and max 200 chars. `createdAt` is set once and never changes. Without these, all columns would be nullable `VARCHAR(255)`, and the schema wouldn't match the Flyway migration (which defines them as `NOT NULL`). |
+| `@Enumerated(EnumType.STRING)` | Enum fields (`PromotionType`, `PromotionStatus`, etc.) | Tells Hibernate to store the enum as a string (e.g., `"CASHBACK"`) in the database instead of an integer ordinal (e.g., `2`). | You add a new promotion type `LOYALTY_POINTS` between `CASHBACK` and `BOGO`. With `EnumType.ORDINAL`, all existing `CASHBACK` (= 2) rows would now be interpreted as the new type. With `EnumType.STRING`, the database stores `"CASHBACK"` literally — reordering enum constants doesn't break data. |
+| `@Builder.Default` | Entity fields with default values | **Lombok annotation.** When using the `@Builder` pattern, fields without explicit values default to their Java defaults (null for objects, 0 for ints). `@Builder.Default` tells Lombok to use the field's own default value instead. | `@Builder.Default private Integer usageCount = 0;` — if you call `Promotion.builder().title("Sale").build()`, `usageCount` is `0`, not `null`. Without this, the builder sets `usageCount` to `null`, and the `@Column(nullable = false)` validation would fail. |
+| `@PrePersist` | `onCreate()` method | Lifecycle callback. Hibernate calls this method **before** the first `INSERT` of this entity. Used to set creation timestamps. | `Promotion.createdAt` is set to `OffsetDateTime.now()` automatically when you call `save()` for the first time. You never need to set it manually in your code. |
+| `@PreUpdate` | `onUpdate()` method | Lifecycle callback. Hibernate calls this method **before** each `UPDATE` of this entity. Used to update modification timestamps. | Every time you call `promotion.setUsageCount(...)` and `save()`, the `updatedAt` field auto-updates to the current time. |
+| `@Query("SELECT COUNT(pu) FROM PromotionUsage pu WHERE pu.userId = :userId AND pu.promotionId = :promotionId")` | Repository method | Defines a custom JPQL (Java Persistence Query Language) query when the method name isn't sufficient. JPQL works with entity field names, not database column names. | `countByUserIdAndPromotionId()` uses an aggregate query (`COUNT`) instead of fetching all rows and counting in Java. For 10 million usage records, the database counts them in milliseconds. Fetching all would crash the service with an `OutOfMemoryError`. |
+| `@Param("userId")` | Repository method parameter | Binds a method parameter to a named query parameter (`:userId` in the `@Query`). | The `@Query` references `:userId`. The method parameter `UUID userId` with `@Param("userId")` provides the value. Without `@Param`, Spring Data JPA uses the parameter name by convention (only works with `-parameters` compiler flag). |
+
+### 14e. Spring Transaction Management
+
+| Annotation | Where used | What it does | Real-world scenario |
+|-----------|-----------|-------------|-------------------|
+| `@Transactional` | `PromotionsServiceImpl.java` (class level + `applyPromotion()` + `createPromotion()` + `deactivatePromotion()`) | Declares that all methods in the class (or specific method) should run within a database transaction. Spring opens a JDBC connection, disables auto-commit, and either commits (success) or rolls back (exception). | `applyPromotion()` does THREE database writes: (1) save `PromotionUsage`, (2) update `Promotion.usageCount`, (3) credit cashback wallet. If step 3 throws an exception, steps 1 and 2 are automatically rolled back. The promotion usage counter is never incremented without the cashback being credited. Without `@Transactional`, step 1 would be committed immediately — if step 3 fails, the usage counter is incremented but cashback is never paid (data inconsistency). |
+
+### 14f. Bean Validation — Input Validation
+
+| Annotation | Where used | What it does | Real-world scenario |
+|-----------|-----------|-------------|-------------------|
+| `@NotBlank(message = "Title is required")` | `CreatePromotionRequest.title` | The string must not be `null`, must have length > 0 after trimming whitespace. | Admin submits a promotion with `title: ""`. Spring rejects it immediately, returns `400 Bad Request` with the error message. The admin sees "Title is required" in the form. |
+| `@NotNull(message = "Promotion type is required")` | `CreatePromotionRequest.type` | The value must not be `null`. | Admin submits a promotion with `type` missing from the JSON. Spring returns 400 before the service method runs. Without this, the service would get `null` for `type` and throw a cryptic `NullPointerException` deep in the discount calculation. |
+| `@Positive(message = "Discount value must be positive")` | `CreatePromotionRequest.discountValue` | The numeric value must be > 0. | Admin enters `discountValue: -500`. Spring rejects it. The database would accept `-500` (no CHECK constraint), leading to a promotion that gives negative discounts (charges customers extra). |
+
+### 14g. Lombok — Boilerplate Elimination
+
+| Annotation | Where used | What it does | Real-world scenario |
+|-----------|-----------|-------------|-------------------|
+| `@Getter` | All model/DTO classes | Generates a getter method for every field: `getId()`, `getTitle()`, `getType()`, etc. | Without this, you'd write 20+ getter methods manually in every class. If you rename a field, you must rename the getter. Lombok regenerates them at compile time — no human error. |
+| `@Setter` | All model/DTO classes | Generates a setter method for every field: `setId()`, `setTitle()`, etc. | Same as `@Getter` but for setters. Combined, they give you JavaBean-style access to all fields with zero manual code. |
+| `@NoArgsConstructor` | All model/DTO/entity classes | Generates a no-argument constructor. **Required by JPA** for entity classes — Hibernate uses `Class.newInstance()` via reflection to create entities before populating fields. | Without `@NoArgsConstructor` on `Promotion`, Hibernate would throw `HibernateException: No default constructor for entity` when trying to load a row from the database. |
+| `@AllArgsConstructor` | All model/DTO/entity classes | Generates a constructor with one parameter for every field. Needed by `@Builder` to create instances with all fields set. | `Promotion.builder().title("Sale").discountValue(1000).build()` uses the all-args constructor internally. Without it, the builder wouldn't compile. |
+| `@Builder` | All model/DTO/entity classes | Implements the Builder pattern: `Promotion.builder().title("Sale").type(CASHBACK).build()`. This is the **primary way** objects are created in this project. | Without the builder, creating a `Promotion` with 10 fields would look like: `new Promotion(null, "Sale", null, CASHBACK, ...)` — you'd need to pass `null` for every optional field and remember the exact parameter order. The builder is self-documenting: each setter call names the field. |
+| `@Slf4j` | Service and consumer classes | Creates a static `log` field: `private static final org.slf4j.Logger log = ...`. You call `log.info("Promotion created: {}", id)`. | Without this, every class that needs logging must declare the logger manually: `private static final Logger log = LoggerFactory.getLogger(PromotionsServiceImpl.class);` — same 80 characters in every file. |
+| `@Data` | (Not used in promotions-service, but common in DTOs elsewhere in the project) | Combines `@Getter`, `@Setter`, `@ToString`, `@EqualsAndHashCode`, `@RequiredArgsConstructor`. **Use with caution on entities** — `@EqualsAndHashCode` can cause issues with lazy-loading proxies. | When used on a DTO like `CreatePromotionRequest`, it gives you `toString()`, `equals()`, and `hashCode()` for free — useful for debugging and testing. Not used on entities because `@EqualsAndHashCode` might trigger lazy-loading across the entire object graph. |
+
+### 14h. Spring Cloud — Service Discovery & Load Balancing
+
+| Annotation | Where used | What it does | Real-world scenario |
+|-----------|-----------|-------------|-------------------|
+| `@LoadBalanced` | `WebClientConfig.java` (on `WebClient.Builder` bean) | A **qualifier annotation** (marker). It doesn't change the bean itself but tells Spring Cloud to inject a **load-balancing interceptor** into any `WebClient` built from this builder. The interceptor intercepts HTTP calls, looks up the hostname in Eureka, replaces it with the actual IP:port of a healthy instance. | You call `webClient.post().uri("http://wallet-service/wallet/credit")`. The `@LoadBalanced` interceptor looks up `wallet-service` in Eureka, finds it's running at `192.168.1.6:8090`, and rewrites the URL to `http://192.168.1.6:8090/wallet/credit`. If two instances of `wallet-service` are running, requests are distributed round-robin. Without `@LoadBalanced`, you'd get `UnknownHostException: wallet-service`. |
+
+### 14i. Kafka — Event-Driven Communication
+
+| Annotation | Where used | What it does | Real-world scenario |
+|-----------|-----------|-------------|-------------------|
+| `@KafkaListener(topics = "txn.completed", groupId = "promotions-service")` | `PromotionEventConsumer.handleTransactionCompleted()` | Registers the method as a Kafka message listener. Spring Kafka starts a background thread that polls the specified topic. Each message is deserialized (using the configured `JsonDeserializer`) into the method's parameter type (`TransactionEvent`). The `groupId` determines consumer group behavior. | A user transfers money. The `transfer-service` publishes a `TransactionEvent` to the `txn.completed` topic. Within milliseconds, the `handleTransactionCompleted()` method in `promotions-service` is invoked with that event. It checks if any cashback promotions apply and credits the user automatically. The user never knows their transfer triggered a cross-service event chain. |
+
+### 14j. Jackson — JSON Serialization
+
+| Annotation | Where used | What it does | Real-world scenario |
+|-----------|-----------|-------------|-------------------|
+| `@JsonInclude(JsonInclude.Include.NON_NULL)` | `ApiResponse.java` (shared library) | Tells Jackson to omit fields with `null` values from the JSON output. | An `ApiResponse` with `error = null` produces `{"success": true, "data": {...}}` — no `error` field at all. This keeps responses clean. Without this, every response would include `"error": null` and `"meta": {"pagination": null}`, bloating the JSON. |
+
+### 14k. SpringDoc — API Documentation
+
+| Annotation | Where used | What it does | Real-world scenario |
+|-----------|-----------|-------------|-------------------|
+| `@Operation(summary = "...", description = "...")` | (Not in promotions-service, but used in `fraud-risk-service`) | Adds human-readable documentation to the generated OpenAPI spec. The `summary` appears as the endpoint title in Swagger UI. | When a frontend developer opens Swagger UI, they see "Get active promotions" instead of just the method name `getActivePromotions`. They can understand the API without reading source code. |
+| `@Tag(name = "Promotions", description = "...")` | (Not in promotions-service, but used elsewhere) | Groups related endpoints under a named section in Swagger UI. | All promotion endpoints appear under a "Promotions" heading. The wallet endpoints are under "Wallet". Makes the API documentation navigable for 16+ services with hundreds of endpoints. |
+
+### 14l. Spring Caching — Performance Optimization
+
+| Annotation | Where used (wallet-service example) | What it does | Real-world scenario |
+|-----------|-------------------------------------|-------------|-------------------|
+| `@Cacheable(value = "wallets", key = "#userId")` | Wallet service's `getWallet()` method | **Read-through cache.** Before executing the method, Spring checks Redis for a key like `wallets::<userId>`. If found, the cached value is returned and the method NEVER EXECUTES. If not found, the method runs and its return value is stored in Redis. | A user refreshes their wallet balance 10 times in 10 seconds. Without caching: 10 database queries. With caching: 1 database query + 9 Redis lookups (sub-millisecond). The user sees the same data (cached for 15 minutes by default), and the database gets 90% less load. |
+| `@CacheEvict(value = "wallets", key = "#userId")` | Wallet service's `updateWallet()`/`creditWallet()` methods | **Write-through invalidation.** After the method executes, Spring removes the specified cache entry from Redis. The next `@Cacheable` call will miss the cache and reload from the database. | A user receives money. Their wallet balance changes. The `creditWallet()` method updates the database and evicts the cached wallet. The next `getWallet()` call fetches fresh data from the DB and re-caches it. Without `@CacheEvict`, the user would see their old balance for up to 15 minutes. |
+
+### 14m. @RestControllerAdvice — Global Exception Handling
+
+| Annotation | Where used (in shared library) | What it does | Real-world scenario |
+|-----------|-------------------------------|-------------|-------------------|
+| `@RestControllerAdvice` | `GlobalExceptionHandler.java` | A specialization of `@ControllerAdvice` for `@RestController` classes. It intercepts exceptions thrown from any controller across ALL services (because it's in the shared library and imported by every service). Methods annotated with `@ExceptionHandler` define how to handle specific exception types. | Any service throws a `BusinessException`. Instead of each controller wrapping every call in try-catch, this single class catches it, logs it, and returns a consistent JSON error response. If you need to change the error response format, you change ONE file, not 20 controllers across 16 services. |
+
+### 14n. How Annotations Flow Through a Request
+
+Here's the annotation chain for a single `POST /promotions` request:
+
+```
+1. Client sends POST /promotions
+         │
+2. Spring finds the method via:
+   @RestController              ← class level
+   @RequestMapping("/promotions")  ← class level  
+   @PostMapping                 ← method level
+         │
+3. Spring extracts parameters:
+   @RequestBody                 ← deserialize JSON → CreatePromotionRequest
+   @Valid                       ← validate @NotBlank, @NotNull, @Positive
+         │
+4. Spring calls the method:
+   promotionsService.createPromotion(request)
+         │
+5. Service method runs:
+   @Service                     ← this is a Spring bean
+   @Transactional               ← runs in a DB transaction
+         │
+6. Repository saves:
+   @Repository                  ← data access, exception translation
+   promotionRepository.save(promotion)
+         │
+7. JPA entity lifecycle:
+   @Entity @Table(name="promotions")
+   @PrePersist                  ← set createdAt
+         │
+8. Response returned:
+   ApiResponse.success(data)    ← wrapped in JSON envelope
+         │
+9. Swagger docs generated from:
+   @PostMapping, @RequestBody, @Valid, etc.
+```
+
+## 15. Summary — Putting It All Together
 
 Here's the complete lifecycle of a request through the promotions-service:
 
