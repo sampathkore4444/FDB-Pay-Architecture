@@ -63,7 +63,10 @@ We will walk every file top-to-bottom, explain what each piece does and why it e
     - [14l. Spring Caching — Performance Optimization](#14l-spring-caching--performance-optimization)
     - [14m. @RestControllerAdvice — Global Exception Handling](#14m-restcontrolleradvice--global-exception-handling)
     - [14n. How Annotations Flow Through a Request](#14n-how-annotations-flow-through-a-request)
-15. [Summary — Putting It All Together](#15-summary--putting-it-all-together)
+15. [Quick-Start Guide — From Zero to Running](#15-quick-start-guide--from-zero-to-running)
+16. [Adding a New Service — Complete Checklist](#16-adding-a-new-service--complete-checklist)
+17. [Common Pitfalls & Gotchas](#17-common-pitfalls--gotchas)
+18. [Summary — Putting It All Together](#18-summary--putting-it-all-together)
 
 ---
 
@@ -2200,7 +2203,382 @@ Here's the annotation chain for a single `POST /promotions` request:
    @PostMapping, @RequestBody, @Valid, etc.
 ```
 
-## 15. Summary — Putting It All Together
+## 15. Quick-Start Guide — From Zero to Running
+
+If you're cloning the repo for the first time and want to run `promotions-service` locally:
+
+### Prerequisites
+
+```
+Java 21+          (install SDKMAN! or download from https://adoptium.net)
+Docker Desktop    (for PostgreSQL, Redis, Kafka)
+```
+
+### Step 1: Start infrastructure
+
+```bash
+cd /opt/FDB_PAY
+docker compose up -d postgres redis kafka
+```
+
+This starts the three services `promotions-service` depends on. Wait until they're healthy (`docker compose ps` shows `(healthy)`).
+
+### Step 2: Build the project
+
+```bash
+cd backend
+./mvnw clean install -pl shared -DskipTests       # Build shared library first
+./mvnw clean package -pl promotions-service -am -DskipTests   # Build promotions-service + dependencies
+```
+
+The `-am` flag means "also make" — it builds parent POM and `shared` if needed.
+
+### Step 3: Run the service
+
+```bash
+# Terminal 1: Start Eureka (service discovery)
+docker compose up -d eureka-server
+
+# Wait for Eureka to be healthy, then:
+# Terminal 2: Run the service
+java -jar promotions-service/target/promotions-service-1.0.0-SNAPSHOT.jar \
+  --server.port=8096 \
+  --DB_HOST=localhost \
+  --REDIS_HOST=localhost \
+  --KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
+  --EUREKA_URL=http://localhost:8761/eureka/
+```
+
+Or use Docker (slower but matches production):
+
+```bash
+docker compose --profile build build backend-build   # Build the big Docker image
+docker compose up -d eureka-server promotions-service
+```
+
+### Step 4: Test the endpoint
+
+```bash
+# Health check
+curl http://localhost:8096/actuator/health
+
+# Create a promotion
+curl -X POST http://localhost:8096/promotions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Summer Sale",
+    "type": "PERCENTAGE_DISCOUNT",
+    "fundingType": "MERCHANT",
+    "discountValue": 1000,
+    "maxDiscount": 5000,
+    "promoCode": "SUMMER20"
+  }'
+
+# Get active promotions
+curl http://localhost:8096/promotions/active
+
+# Validate a promo code
+curl -X POST "http://localhost:8096/promotions/validate?promoCode=SUMMER20&amount=50000&userId=550e8400-e29b-41d4-a716-446655440000"
+
+# Apply a promotion (creates usage record)
+curl -X POST "http://localhost:8096/promotions/apply?userId=550e8400-e29b-41d4-a716-446655440000" \
+  -H "Content-Type: application/json" \
+  -d '{"promoCode": "SUMMER20", "transactionAmount": 50000}'
+
+# Get cashback wallet (if promotion type was CASHBACK)
+curl "http://localhost:8096/promotions/cashback-wallet?userId=550e8400-e29b-41d4-a716-446655440000"
+
+# Paginated user promotions
+curl "http://localhost:8096/promotions/my?userId=550e8400-e29b-41d4-a716-446655440000&page=0&size=10"
+
+# Deactivate a promotion
+curl -X DELETE "http://localhost:8096/promotions/550e8400-e29b-41d4-a716-446655440000"
+
+# Swagger UI (after starting the API gateway)
+open http://localhost:3000/swagger-ui.html
+```
+
+### Step 5: Verify database
+
+```bash
+docker exec -it fdb_pay-postgres-1 psql -U postgres -d fdbpay_promotions -c "SELECT id, title, status FROM promotions;"
+```
+
+## 16. Adding a New Service — Complete Checklist
+
+When you need to add a brand-new microservice to FDB Pay, follow these steps in order:
+
+### Step 1: Create the module directory
+
+```bash
+mkdir -p backend/new-service/src/main/java/com/fdbpay/new/service/{config,controller,dto/{request,response},model/enums,repository,service/impl,consumer}
+mkdir -p backend/new-service/src/main/resources/db/migration
+mkdir -p backend/new-service/src/test/java/com/fdbpay/new/service
+```
+
+### Step 2: Create pom.xml
+
+Copy from `promotions-service/pom.xml` and change:
+- `<artifactId>` → `new-service`
+- `<name>` → description
+- Keep ALL the same dependencies (you'll remove unused ones later)
+
+### Step 3: Register in parent POM
+
+Edit `backend/pom.xml` — add to `<modules>`:
+
+```xml
+<module>new-service</module>
+```
+
+### Step 4: Create application.yml
+
+Copy from `promotions-service/src/main/resources/application.yml` and change:
+- `server.port` → pick an unused port (check `docker-compose.yml` for existing ports: 8090-8099 are used)
+- `spring.application.name` → `new-service` (this is the Eureka service ID)
+- `spring.datasource.url` → change `DB_NAME` to `fdbpay_new_service`
+
+### Step 5: Create Flyway migration
+
+`src/main/resources/db/migration/V1__init_new_service_schema.sql` — define your tables here, **never** use `ddl-auto: update`.
+
+### Step 6: Create the main class
+
+```java
+@SpringBootApplication(scanBasePackages = {"com.fdbpay.new.service", "com.fdbpay.shared"})
+@EnableDiscoveryClient
+public class NewServiceApplication { ... }
+```
+
+### Step 7: Create database
+
+Add to `docker/postgres-init.sql`:
+
+```sql
+CREATE DATABASE fdbpay_new_service;
+```
+
+### Step 8: Register in Dockerfile
+
+Add to `backend/Dockerfile`:
+- `COPY new-service/pom.xml new-service/pom.xml` (after line ~24)
+- `COPY new-service/ new-service/` (after line ~46)
+- In the `RUN mvn clean package -pl` line, add `new-service` to the list
+- `COPY --from=builder /build/new-service/target/*.jar /app/new-service.jar` (after line ~73)
+
+### Step 9: Add to docker-compose.yml
+
+```yaml
+new-service:
+  image: fdbpay-backend:latest
+  environment:
+    SERVICE_NAME: new-service
+    SERVER_PORT: "8099"            # Pick unused port
+    DB_HOST: postgres
+    REDIS_HOST: redis
+    EUREKA_URL: http://eureka-server:8761/eureka/
+    KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  ports: ["8099:8099"]
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis:   { condition: service_healthy }
+    kafka:   { condition: service_healthy }
+```
+
+### Step 10: Add gateway route
+
+In `api-gateway/src/main/resources/application.yml`:
+
+```yaml
+- id: new-service
+  uri: lb://new-service
+  predicates:
+    - Path=/v1/new/**
+  filters:
+    - StripPrefix=1
+```
+
+### Step 11: Add Swagger proxy
+
+In `api-gateway/src/main/resources/application.yml`, add to `springdoc.swagger-ui.urls`:
+
+```yaml
+  - name: new-service
+    url: /v3/api-docs/new-service
+```
+
+And add a swagger proxy route:
+
+```yaml
+- id: swagger-new-service
+  uri: lb://new-service
+  predicates:
+    - Path=/swagger-proxy/new-service/**
+  filters:
+    - RewritePath=/swagger-proxy/new-service/(?<segment>.*), /$\{segment}
+```
+
+### Step 12: Rebuild and test
+
+```bash
+docker compose --profile build build backend-build
+docker compose up -d new-service
+curl http://localhost:8099/actuator/health   # Should return 200
+```
+
+## 17. Common Pitfalls & Gotchas
+
+These are real bugs encountered while building FDB Pay. Each one has a subtle cause that can take hours to debug.
+
+### Gotcha 1: `scanBasePackages` missing the shared library
+
+```java
+// ❌ WRONG — CacheConfig, GlobalExceptionHandler won't be found
+@SpringBootApplication
+public class MyServiceApplication { ... }
+
+// ✅ RIGHT
+@SpringBootApplication(scanBasePackages = {"com.fdbpay.myservice", "com.fdbpay.shared"})
+```
+
+**What breaks:** Redis caching silently doesn't work (no `CacheManager` bean). Exception handler doesn't catch anything (500 instead of 400 for validation errors).
+
+### Gotcha 2: `@Transactional` on the wrong method
+
+```java
+@Service
+public class MyService {
+    @Transactional
+    public void doWork() {
+        updateDb();    // Runs in transaction — OK
+        callOtherServiceViaHttp();  // Also in transaction — BAD
+    }
+}
+```
+
+**What breaks:** The HTTP call to another service holds the DB connection open. If the other service is slow, the connection pool drains. If the other service fails, the DB transaction rolls back (even though the HTTP call already happened).
+
+**Fix:** Move inter-service HTTP calls OUTSIDE the `@Transactional` method. Do DB writes first, commit, then make HTTP calls.
+
+### Gotcha 3: `@Cacheable` called from the same class
+
+```java
+@Service
+public class MyService {
+    public void doWork() {
+        getData();       // ❌ @Cacheable ignored when called internally
+    }
+
+    @Cacheable("cache")
+    public Data getData() { ... }
+}
+```
+
+**What breaks:** Spring's caching proxy only intercepts calls coming FROM OUTSIDE the class. When `doWork()` calls `this.getData()`, the proxy is bypassed — the DB is queried every time.
+
+**Fix:** Either inject the service into itself (`@Autowired MyService self`) or restructure so cacheable methods are called from another bean.
+
+### Gotcha 4: Lazy `@OneToMany` outside a transaction
+
+```java
+@Transactional
+public Data getData() {
+    Promotion p = promotionRepository.findById(id).get();
+    return p.getUsages();    // ✅ Works — inside transaction
+}
+
+public Data getDataNoTxn() {
+    Promotion p = promotionRepository.findById(id).get();
+    return p.getUsages();    // ❌ LazyInitializationException — no open session
+}
+```
+
+**What breaks:** The `usages` collection is configured with `FetchType.LAZY` (the default for `@OneToMany`). When accessed outside a transaction, Hibernate has no open session to query it. You get `LazyInitializationException: could not initialize proxy — no Session`.
+
+**Note:** The `promotions-service` avoids this entirely by using `UUID` foreign-key fields (`promotionId`) instead of `@ManyToOne`/`@OneToMany` JPA relationships — a deliberate design choice to avoid lazy-loading issues.
+
+### Gotcha 5: Kafka consumer not receiving messages
+
+```
+spring.kafka.consumer.properties.spring.json.trusted.packages: "com.fdbpay.shared.*"
+```
+
+**What breaks:** If you forget this property, the consumer throws `SerializationException: Error deserializing JSON` because Jackson refuses to deserialize into `TransactionEvent` (a class from an "untrusted" package). The message stays in the topic unprocessed.
+
+### Gotcha 6: Wrong `ddl-auto` setting
+
+```yaml
+# ❌ DANGEROUS for production
+spring.jpa.hibernate.ddl-auto: update
+
+# ✅ SAFE
+spring.jpa.hibernate.ddl-auto: validate
+```
+
+**What breaks:** With `update`, if you rename a field in your Java entity (e.g., `discountValue` → `discountAmount`), Hibernate issues `ALTER TABLE promotions DROP COLUMN discount_value` — you lose all data in that column. With `validate`, the application fails to start with a clear error message: "Column discount_value not found" — no data loss, instant fix.
+
+### Gotcha 7: Circular dependencies
+
+```java
+// ❌ Circular — ServiceA depends on ServiceB, ServiceB depends on ServiceA
+@Service
+public class ServiceA {
+    private final ServiceB serviceB;
+}
+
+@Service
+public class ServiceB {
+    private final ServiceA serviceA;
+}
+```
+
+**What breaks:** Spring cannot decide which to create first. You get `BeanCurrentlyInCreationException: Requested bean is currently in creation`. This is why `@RequiredArgsConstructor` (constructor injection) is preferred — it detects circular dependencies at startup, not at runtime.
+
+**Fix:** Extract the shared logic into a third service or use events (Kafka) to break the cycle.
+
+### Gotcha 8: `Map.of()` returns immutable map
+
+```java
+Map<String, Object> result = Map.of("key", "value");
+result.put("another", 123);   // ❌ UnsupportedOperationException
+```
+
+`Map.of()` (Java 9+) returns an **immutable** map. Use `new HashMap<>(Map.of(...))` or `new HashMap<>()` with `.put()` if you need to modify it after creation.
+
+### Gotcha 9: Using `@Value` instead of environment variables
+
+```java
+// ❌ Hardcoded — breaks in Docker
+private static final String WALLET_URL = "http://localhost:8090/wallet";
+
+// ✅ Uses env var with fallback
+@Value("${WALLET_SERVICE_URL:http://wallet-service/wallet}")
+private String walletUrl;
+```
+
+Even better: use Eureka + `@LoadBalanced` WebClient so you don't need URLs at all.
+
+### Gotcha 10: Forgetting to add the gateway `StripPrefix` filter
+
+```yaml
+# ❌ WRONG — client calls /v1/promotions/active, service receives /v1/promotions/active
+- id: promotions-service
+  uri: lb://promotions-service
+  predicates:
+    - Path=/v1/promotions/**
+
+# ✅ RIGHT — /v1 is stripped, service receives /promotions/active
+- id: promotions-service
+  uri: lb://promotions-service
+  predicates:
+    - Path=/v1/promotions/**
+  filters:
+    - StripPrefix=1
+```
+
+**What breaks:** The service's `@RequestMapping("/promotions")` doesn't match `/v1/promotions` because of the extra `/v1` prefix. The gateway returns 404.
+
+## 18. Summary — Putting It All Together
 
 Here's the complete lifecycle of a request through the promotions-service:
 
