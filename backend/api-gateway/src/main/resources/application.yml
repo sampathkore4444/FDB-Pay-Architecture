@@ -18,6 +18,8 @@ spring:
           uri: lb://wallet-service
           predicates:
             - Path=/v1/wallet/**
+          filters:
+            - StripPrefix=1
         - id: transfer-service
           uri: lb://transfer-service
           predicates:
@@ -132,11 +134,144 @@ spring:
             - Path=/v1/payroll/**
           filters:
             - RewritePath=/v1/payroll/(?<segment>.*), /corp/payroll/${segment}
+        - id: swagger-proxy-auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/swagger-proxy/auth-service/**
+          filters:
+            - RewritePath=/swagger-proxy/auth-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-wallet-service
+          uri: lb://wallet-service
+          predicates:
+            - Path=/swagger-proxy/wallet-service/**
+          filters:
+            - RewritePath=/swagger-proxy/wallet-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-transfer-service
+          uri: lb://transfer-service
+          predicates:
+            - Path=/swagger-proxy/transfer-service/**
+          filters:
+            - RewritePath=/swagger-proxy/transfer-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-merchant-service
+          uri: lb://merchant-service
+          predicates:
+            - Path=/swagger-proxy/merchant-service/**
+          filters:
+            - RewritePath=/swagger-proxy/merchant-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-bill-payment-service
+          uri: lb://bill-payment-service
+          predicates:
+            - Path=/swagger-proxy/bill-payment-service/**
+          filters:
+            - RewritePath=/swagger-proxy/bill-payment-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-agent-service
+          uri: lb://agent-service
+          predicates:
+            - Path=/swagger-proxy/agent-service/**
+          filters:
+            - RewritePath=/swagger-proxy/agent-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-corporate-service
+          uri: lb://corporate-service
+          predicates:
+            - Path=/swagger-proxy/corporate-service/**
+          filters:
+            - RewritePath=/swagger-proxy/corporate-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-fraud-risk-service
+          uri: lb://fraud-risk-service
+          predicates:
+            - Path=/swagger-proxy/fraud-risk-service/**
+          filters:
+            - RewritePath=/swagger-proxy/fraud-risk-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-settlement-service
+          uri: lb://settlement-service
+          predicates:
+            - Path=/swagger-proxy/settlement-service/**
+          filters:
+            - RewritePath=/swagger-proxy/settlement-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-dispute-service
+          uri: lb://dispute-service
+          predicates:
+            - Path=/swagger-proxy/dispute-service/**
+          filters:
+            - RewritePath=/swagger-proxy/dispute-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-reporting-service
+          uri: lb://reporting-service
+          predicates:
+            - Path=/swagger-proxy/reporting-service/**
+          filters:
+            - RewritePath=/swagger-proxy/reporting-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-kyc-service
+          uri: lb://kyc-service
+          predicates:
+            - Path=/swagger-proxy/kyc-service/**
+          filters:
+            - RewritePath=/swagger-proxy/kyc-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-audit-service
+          uri: lb://audit-service
+          predicates:
+            - Path=/swagger-proxy/audit-service/**
+          filters:
+            - RewritePath=/swagger-proxy/audit-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-remittance-service
+          uri: lb://remittance-service
+          predicates:
+            - Path=/swagger-proxy/remittance-service/**
+          filters:
+            - RewritePath=/swagger-proxy/remittance-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-promotions-service
+          uri: lb://promotions-service
+          predicates:
+            - Path=/swagger-proxy/promotions-service/**
+          filters:
+            - RewritePath=/swagger-proxy/promotions-service/(?<segment>.*), /${segment}
+        - id: swagger-proxy-support-service
+          uri: lb://support-service
+          predicates:
+            - Path=/swagger-proxy/support-service/**
+          filters:
+            - RewritePath=/swagger-proxy/support-service/(?<segment>.*), /${segment}
 
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: auth-service
+        url: /swagger-proxy/auth-service/api-docs
+      - name: wallet-service
+        url: /swagger-proxy/wallet-service/api-docs
+      - name: transfer-service
+        url: /swagger-proxy/transfer-service/api-docs
+      - name: merchant-service
+        url: /swagger-proxy/merchant-service/api-docs
+      - name: bill-payment-service
+        url: /swagger-proxy/bill-payment-service/api-docs
+      - name: agent-service
+        url: /swagger-proxy/agent-service/api-docs
+      - name: corporate-service
+        url: /swagger-proxy/corporate-service/api-docs
+      - name: fraud-risk-service
+        url: /swagger-proxy/fraud-risk-service/api-docs
+      - name: settlement-service
+        url: /swagger-proxy/settlement-service/api-docs
+      - name: dispute-service
+        url: /swagger-proxy/dispute-service/api-docs
+      - name: reporting-service
+        url: /swagger-proxy/reporting-service/api-docs
+      - name: kyc-service
+        url: /swagger-proxy/kyc-service/api-docs
+      - name: audit-service
+        url: /swagger-proxy/audit-service/api-docs
+      - name: remittance-service
+        url: /swagger-proxy/remittance-service/api-docs
+      - name: promotions-service
+        url: /swagger-proxy/promotions-service/api-docs
+      - name: support-service
+        url: /swagger-proxy/support-service/api-docs
 
 jwt:
   secret: ${JWT_SECRET:your-256-bit-secret-key-change-in-production}

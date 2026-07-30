@@ -95,7 +95,7 @@ public class RemittanceServiceImpl implements RemittanceService {
         }
 
         long fee = calculateFee(request.getAmount(), corridor);
-        long amountMmk = request.getAmount().multiply(corridor.getExchangeRate()).longValue() - fee;
+        long amountMmk = BigDecimal.valueOf(request.getAmount()).multiply(corridor.getExchangeRate()).longValue() - fee;
         String referenceNumber = generateReferenceNumber();
 
         Remittance remittance = Remittance.builder()
@@ -181,7 +181,7 @@ public class RemittanceServiceImpl implements RemittanceService {
 
     private long calculateFee(Long amount, RemittanceCorridor corridor) {
         long fixedFee = corridor.getFeeFixed();
-        long percentageFee = amount.multiply(corridor.getFeePercentage())
+        long percentageFee = BigDecimal.valueOf(amount).multiply(corridor.getFeePercentage())
                 .setScale(0, RoundingMode.HALF_UP).longValue();
         return fixedFee + percentageFee;
     }

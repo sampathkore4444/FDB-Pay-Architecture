@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.scheduling.annotation.EnableAsync;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"com.fdbpay.notification", "com.fdbpay.shared"})
 @EnableDiscoveryClient
 @EnableAsync
 public class NotificationServiceApplication {

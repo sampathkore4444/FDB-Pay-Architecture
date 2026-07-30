@@ -23,8 +23,7 @@ public interface DisputeRepository extends JpaRepository<Dispute, UUID> {
 
     long countByStatus(DisputeStatus status);
 
-    @Query("SELECT AVG(FUNCTION('EXTRACT', FUNCTION('EPOCH', d.resolvedAt - d.createdAt)) / 3600.0) " +
-            "FROM Dispute d WHERE d.resolvedAt IS NOT NULL")
+    @Query(value = "SELECT AVG(EXTRACT(EPOCH FROM d.resolved_at - d.created_at) / 3600.0) FROM disputes d WHERE d.resolved_at IS NOT NULL", nativeQuery = true)
     Double avgResolutionHours();
 
     @Query("SELECT d FROM Dispute d ORDER BY d.createdAt DESC")

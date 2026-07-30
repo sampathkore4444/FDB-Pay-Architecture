@@ -37,7 +37,13 @@ public class AuthFilter implements GlobalFilter, Ordered {
             "/v1/auth/login",
             "/v1/auth/otp/**",
             "/v1/health",
-            "/actuator/**"
+            "/actuator/**",
+            "/swagger-ui.html",
+            "/swagger-ui/**",
+            "/swagger-proxy/**",
+            "/api-docs/**",
+            "/v3/api-docs/**",
+            "/webjars/**"
     );
 
     @Override

@@ -163,9 +163,10 @@ public class SupportServiceImpl implements SupportService {
                     .orElseThrow(() -> new BusinessException(ErrorCodes.SERVICE_UNAVAILABLE, "No available account managers"));
             managerId = availableManager.getId();
         }
+        final UUID resolvedManagerId = managerId;
 
-        AccountManager manager = managerRepository.findById(managerId)
-                .orElseThrow(() -> new ResourceNotFoundException("Account Manager", managerId.toString()));
+        AccountManager manager = managerRepository.findById(resolvedManagerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Account Manager", resolvedManagerId.toString()));
 
         ticket.setAssignedManagerId(managerId);
         ticket.setStatus(TicketStatus.IN_PROGRESS);

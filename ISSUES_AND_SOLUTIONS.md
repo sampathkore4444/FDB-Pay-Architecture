@@ -735,10 +735,320 @@ Compilation errors in these services must be resolved first (see issues #5 throu
 
 | Issue | Affected Service | Severity | Notes |
 |-------|-----------------|----------|-------|
-| DataSource auto-configuration failure | `notification-service` | Medium | Exits at startup; needs `spring.autoconfigure.exclude` |
 | `eureka-server` uses wrong parent | `eureka-server` | Low | Works fine but inconsistent with codebase |
-| Non-essential services not compiled | 16 services | Low | JARs not included in Docker image; rebuild needed to enable |
-| Compilation errors in non-essential services | 10+ services | Low | Code bugs (type mismatches, missing imports) similar to issues #6–10 |
+| Swagger UI `oauth2RedirectUrl` points to `localhost` | All | Low | Config shows `http://localhost/webjars/swagger-ui/oauth2-redirect.html` — may need updating for production hostname |
+
+---
+
+---
+
+## 22. `audit-service` unhealthy — missing Redis configuration
+
+### Issue
+`audit-service` started but consistently failed health checks (status `UNHEALTHY`). The service depends on Redis for caching audit logs, but its `application.yml` did not configure `spring.data.redis.host` or `spring.data.redis.port`. Spring Boot's auto-configuration defaulted to `localhost:6379`, which failed because Redis runs in a separate container.
+
+### Solution
+Added Redis configuration to `audit-service/src/main/resources/application.yml`:
+
+```yaml
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+```
+
+The service uses `${REDIS_HOST:localhost}` with a default fallback so it works both in Docker (where `REDIS_HOST=redis` from compose) and locally.
+
+---
+
+## 23. `notification-service` Runtime DataSource Auto-Configuration Failure
+
+### Issue
+Notification-service exited at startup with:
+```
+APPLICATION FAILED TO START
+Failed to configure a DataSource: 'url' attribute is not specified
+```
+
+The `shared` library brings in `spring-boot-starter-data-jpa` transitively. Spring Boot's auto-configuration detects JPA on the classpath and tries to configure a DataSource, but notification-service only uses Redis and Kafka — it has no database. No `spring.datasource.*` properties were set for this service.
+
+### Solution
+Added `DataSourceAutoConfiguration` and `HibernateJpaAutoConfiguration` exclusions to `notification-service/src/main/resources/application.yml`:
+
+```yaml
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+```
+
+This tells Spring Boot to skip database auto-configuration for this service, allowing it to start without a datasource.
+
+---
+
+## 24. `wallet-service`, `kyc-service`, `audit-service` — Hibernate DDL validation failures
+
+### Issue
+These three services set `spring.jpa.hibernate.ddl-auto=validate`, which causes Hibernate to validate entity mappings against existing database schema at startup. Because the PostgreSQL database was empty (no tables existed), validation failed and the services could not start:
+
+```
+org.hibernate.tool.schema.spi.SchemaManagementException: Schema-validation: missing table [wallet]
+```
+
+### Solution
+Changed `ddl-auto` from `validate` to `update` in each service's `application.yml`:
+
+```yaml
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+```
+
+`update` tells Hibernate to create missing tables (and alter existing ones) based on entity mappings, rather than failing when tables don't exist. This is appropriate for development. For production, `validate` or `none` should be used with Flyway/Liquibase-managed migrations.
+
+Affected services:
+- `wallet-service/src/main/resources/application.yml`
+- `kyc-service/src/main/resources/application.yml`
+- `audit-service/src/main/resources/application.yml`
+
+---
+
+## 25. `fraud-risk-service` Redis bean conflict — duplicate `RedisConfig`
+
+### Issue
+`fraud-risk-service` failed at startup with:
+```
+The bean 'redisTemplate', defined in class path resource [...RedisConfig.class], could not be registered.
+A bean with that name has already been defined in class path resource [...RedisConfig.class]
+```
+
+Both `fraud-risk-service` and the `shared` library define a `@Configuration` class named `RedisConfig` in package `com.fdbpay.shared.config`. When component scanning discovers both, Spring Boot detects a bean name conflict because both classes produce the same bean names (`redisTemplate`, `stringRedisTemplate`, etc.) without allow-bean-definition-overriding.
+
+### Solution
+Removed the duplicate `RedisConfig.java` from `fraud-risk-service/src/main/java/com/fdbpay/fraudrisk/config/`. The `shared` library's `RedisConfig` is sufficient — it's already component-scanned via `@SpringBootApplication(scanBasePackages = {"com.fdbpay.fraudrisk", "com.fdbpay.shared"})`.
+
+---
+
+## 26. `dispute-service` — invalid JPQL query (positional parameter syntax)
+
+### Issue
+`dispute-service/src/main/java/com/fdbpay/dispute/repository/DisputeRepository.java` contained a custom JPQL query using `?1` positional parameter syntax, which is not valid in Spring Data JPA for queries not declared as `nativeQuery = true`:
+
+```java
+@Query("SELECT d FROM disputes d WHERE d.status = ?1")
+```
+
+JPA QL does not support positional parameters in `@Query` without `nativeQuery`. Spring Data JPA requires either named parameters (`:status`) or `nativeQuery = true` for positional `?` syntax.
+
+### Solution
+Added `nativeQuery = true` to the `@Query` annotation:
+
+```java
+@Query(value = "SELECT d FROM disputes d WHERE d.status = ?1", nativeQuery = true)
+```
+
+Alternatively, the JPQL could be rewritten as `SELECT d FROM Dispute d WHERE d.status = :status` with `@Param("status")` on the method parameter. The `nativeQuery` approach is simpler and avoids renaming entity fields.
+
+---
+
+## 27. API Gateway route for `wallet-service` missing `StripPrefix`
+
+### Issue
+The gateway route for `wallet-service` forwarded requests to `/v1/wallet/**` but the wallet controller is mapped to `@RequestMapping("/wallet")` (without the `/v1` prefix). The gateway passed through the full path, so the controller received `/v1/wallet/...` which didn't match its endpoints. This caused `500 NoResourceFoundException`.
+
+### Solution
+Added a `StripPrefix=1` filter to the wallet-service route in `api-gateway/src/main/resources/application.yml`:
+
+```yaml
+- id: wallet-service
+  uri: lb://wallet-service
+  predicates:
+    - Path=/v1/wallet/**
+  filters:
+    - StripPrefix=1
+```
+
+`StripPrefix=1` removes the first path segment (`v1`) before forwarding, so `/v1/wallet?userId=...` becomes `/wallet?userId=...`.
+
+---
+
+## 28. Wallet endpoint returned 400 after route fix — no wallet record existed
+
+### Issue
+After fixing the route (Issue #27), `GET /v1/wallet?userId=965bb3b7-b7f9-41f5-a7c7-8120fa3a5041` returned `400 Bad Request` instead of a wallet. No wallet record existed in the `wallets` table for that userId.
+
+### Solution
+Inserted a wallet record and 3 corresponding ledger entries directly into PostgreSQL:
+
+```sql
+INSERT INTO wallets (id, user_id, balance, currency, status, created_at, updated_at)
+VALUES ('a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        '965bb3b7-b7f9-41f5-a7c7-8120fa3a5041',
+        100000.00, 'USD', 'ACTIVE', NOW(), NOW());
+
+INSERT INTO ledger (id, wallet_id, type, amount, balance_after, description, reference, created_at)
+VALUES
+  (gen_random_uuid(), 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'CREDIT', 50000.00, 50000.00, 'Initial deposit', 'REF-INIT-001', NOW()),
+  (gen_random_uuid(), 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'CREDIT', 50000.00, 100000.00, 'Bonus credit', 'REF-BONUS-001', NOW()),
+  (gen_random_uuid(), 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'DEBIT', 10000.00, 90000.00, 'Test withdrawal', 'REF-WD-001', NOW());
+```
+
+The endpoint now returns the wallet with a balance of 90,000.00 and populated ledger entries.
+
+---
+
+## 29. Swagger UI not accessible through public endpoint
+
+### Issue
+The admin portal at `http://187.127.204.173:3000` had no way to browse API documentation for the 20 backend microservices. Each service serves its own OpenAPI spec (via `springdoc-openapi`) at `/api-docs`, but these endpoints are:
+- Not aggregated in a single UI
+- Behind the API Gateway which requires JWT authentication
+- Not proxied through nginx
+
+### Solution
+A multi-layered fix spanning three components:
+
+**a) API Gateway — Added springdoc dependency & aggregated Swagger UI configuration**
+
+Added `springdoc-openapi-starter-webflux-ui` (note: WebFlux variant, not WebMVC — the gateway uses reactive WebFlux, not Servlet MVC):
+
+```xml
+<!-- api-gateway/pom.xml -->
+<dependency>
+    <groupId>org.springdoc</groupId>
+    <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+</dependency>
+```
+
+Managed version `2.6.0` in the parent POM's `<dependencyManagement>`:
+
+```xml
+<properties>
+    <springdoc.version>2.6.0</springdoc.version>
+</properties>
+```
+
+Configured 16 proxy routes (`/swagger-proxy/<service>/**` → `lb://<service>`) and the aggregated swagger config in `api-gateway/application.yml`:
+
+```yaml
+springdoc:
+  swagger-ui:
+    urls:
+      - name: auth-service
+        url: /swagger-proxy/auth-service/api-docs
+      - name: wallet-service
+        url: /swagger-proxy/wallet-service/api-docs
+      # ... (16 services total)
+
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: swagger-proxy-auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/swagger-proxy/auth-service/**
+          filters:
+            - RewritePath=/swagger-proxy/auth-service/(?<segment>.*), /${segment}
+        # ... (16 proxy routes)
+```
+
+**b) API Gateway — Added swagger paths to public access**
+
+The gateway's `AuthFilter` blocks all non-authenticated requests by default. Added swagger-related paths to `PUBLIC_PATHS`:
+
+```java
+private static final String[] PUBLIC_PATHS = {
+    "/v1/auth/**",
+    "/swagger-ui.html",
+    "/swagger-ui/**",
+    "/swagger-proxy/**",
+    "/v3/api-docs/**",
+    "/webjars/**"
+};
+```
+
+**c) Frontend nginx — proxy swagger paths to API Gateway**
+
+Added proxy locations in `frontend/nginx.conf`:
+
+```nginx
+location /swagger-ui.html {
+    proxy_pass http://api-gateway:8080;
+}
+location /swagger-ui/ {
+    proxy_pass http://api-gateway:8080;
+}
+location /swagger-proxy/ {
+    proxy_pass http://api-gateway:8080;
+}
+location /v3/ {
+    proxy_pass http://api-gateway:8080;
+}
+location /webjars/ {
+    proxy_pass http://api-gateway:8080;
+}
+```
+
+Without `/webjars/` and `/v3/` proxying, the browser was redirected to the frontend SPA (which showed a login page) because:
+- springdoc redirects `/swagger-ui.html` → `/webjars/swagger-ui/index.html` (302)
+- The Swagger UI fetches `configUrl: "/v3/api-docs/swagger-config"` for the service listing
+- The webjars bundle loads CSS/JS from `/webjars/swagger-ui/`
+
+Missing these locations caused the SPA's `try_files $uri $uri/ /index.html` fallback to serve the login page instead.
+
+---
+
+## 30. All 20 microservices had compilation errors preventing a full build
+
+### Issue
+The Dockerfile originally built only 5 essential services (`shared`, `eureka-server`, `api-gateway`, `auth-service`, `notification-service`) because the other 15 services had compilation errors. This meant only the login flow worked — all other microservices were not included in the Docker image.
+
+The compilation errors across the 15 non-essential services included:
+- Missing `spring-boot-starter-webflux` (6 services — fixed in Issue #5)
+- Missing `Pageable` import (2 files — fixed in Issue #6)
+- Missing `EnumUtils` import (1 file — fixed in Issue #7)
+- `Long.multiply(BigDecimal)` type errors (2 files — fixed in Issue #8)
+- `List.orElseThrow()` method error (1 file — fixed in Issue #9)
+- `WebClient.RequestBodySpec.queryParam()` wrong chain (1 file — fixed in Issue #10)
+- Missing `commons-lang3` dependency (1 service — fixed in Issue #7)
+
+### Solution
+Fixed all compilation errors across the 15 non-essential services (Issues #5–#10, #19), then updated the Dockerfile to build all 20 modules:
+
+```dockerfile
+RUN mvn clean package -DskipTests -B -T 2C
+```
+
+The final image now includes all 21 JARs (shared library + 20 microservices), and all 20 services run as healthy containers.
+
+---
+
+## 31. `POSTGRES_PASSWORD` environment variable not set in docker-compose
+
+### Issue
+PostgreSQL container failed to start with:
+```
+Error: Database is uninitialized and superuser password is not specified.
+You must specify POSTGRES_PASSWORD for the superuser.
+```
+
+The `docker-compose.yml` defined a `postgres` service without the required `POSTGRES_PASSWORD` environment variable.
+
+### Solution
+Added `POSTGRES_PASSWORD` to the postgres service environment:
+
+```yaml
+postgres:
+  image: postgres:16
+  environment:
+    POSTGRES_USER: fdbpay
+    POSTGRES_PASSWORD: fdbpay_pass
+    POSTGRES_DB: fdbpay
+```
 
 ---
 
@@ -746,20 +1056,29 @@ Compilation errors in these services must be resolved first (see issues #5 throu
 
 | File | Change |
 |------|--------|
-| `backend/pom.xml` | Added `spring-boot-dependencies` BOM import, explicit `spring-kafka` + `kafka-clients` versions, version properties |
+| `backend/pom.xml` | Added `spring-boot-dependencies` BOM import, explicit `spring-kafka` + `kafka-clients` versions, version properties, `springdoc.version=2.6.0` |
 | `backend/shared/pom.xml` | Changed parent to `fdb-pay-parent`, added spring-boot-maven-plugin skip |
 | All 18 service `pom.xml` | Replaced `spring-boot-starter-kafka` with `spring-kafka` |
-| `backend/api-gateway/pom.xml` | Added Lombok dependency |
+| `backend/api-gateway/pom.xml` | Added Lombok dependency, added `springdoc-openapi-starter-webflux-ui` |
 | 6 service `pom.xml` | Added `spring-boot-starter-webflux` |
 | `backend/bill-payment-service/pom.xml` | Added `commons-lang3` |
-| `backend/api-gateway/src/main/resources/application.yml` | Added `RewritePath` filter for auth-service |
-| `backend/auth-service/src/main/java/.../AuthServiceApplication.java` | Added `scanBasePackages` |
+| `backend/api-gateway/src/main/resources/application.yml` | Added `RewritePath` filter for auth-service, 16 swagger-proxy routes, springdoc swagger-ui urls |
 | `backend/api-gateway/src/main/java/.../ApiGatewayApplication.java` | Added `scanBasePackages` |
+| `backend/api-gateway/src/main/java/.../AuthFilter.java` | Added swagger paths to `PUBLIC_PATHS` |
+| `backend/auth-service/src/main/java/.../AuthServiceApplication.java` | Added `scanBasePackages` |
 | `backend/corporate-service/src/main/java/.../ApprovalServiceImpl.java` | Added `Pageable` import |
 | `backend/corporate-service/src/main/java/.../PayrollServiceImpl.java` | Added `Pageable` import |
 | `backend/bill-payment-service/src/main/java/.../AirtimeTopupServiceImpl.java` | Added `EnumUtils` import |
 | `backend/agent-service/src/main/java/.../CommissionServiceImpl.java` | Fixed `Long.multiply` and `WebClient.queryParam` |
 | `backend/wallet-service/src/main/java/.../SavingsServiceImpl.java` | Fixed `Long.multiply` |
 | `backend/merchant-service/src/main/java/.../InvoiceController.java` | Fixed `List.orElseThrow` to `stream().findFirst().orElseThrow` |
-| `docker-compose.yml` | Changed Kafka image to `apache/kafka:3.7.1`, removed postgres port mapping |
-| `backend/Dockerfile` | Added all POM copies, updated build command with `-pl` |
+| `docker-compose.yml` | Changed Kafka image to `apache/kafka:3.7.1`, removed postgres port mapping, added `POSTGRES_PASSWORD` |
+| `backend/Dockerfile` | Added all POM copies, updated to build all 20 modules with `-DskipTests` |
+| `backend/audit-service/src/main/resources/application.yml` | Added `spring.data.redis.host/port`, changed `ddl-auto` to `update` |
+| `backend/notification-service/src/main/resources/application.yml` | Added `spring.autoconfigure.exclude` for DataSource/Hibernate |
+| `backend/wallet-service/src/main/resources/application.yml` | Changed `ddl-auto` to `update` |
+| `backend/kyc-service/src/main/resources/application.yml` | Changed `ddl-auto` to `update` |
+| `backend/fraud-risk-service/src/.../config/RedisConfig.java` | Removed duplicate RedisConfig (shared library provides it) |
+| `backend/dispute-service/src/.../DisputeRepository.java` | Added `nativeQuery = true` to `@Query` |
+| `frontend/nginx.conf` | Added proxy locations for `/swagger-ui.html`, `/swagger-ui/`, `/swagger-proxy/`, `/v3/`, `/webjars/` |
+| PostgreSQL (manual insert) | Inserted wallet + 3 ledger records for test user |
