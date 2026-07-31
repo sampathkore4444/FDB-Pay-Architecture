@@ -48,6 +48,11 @@ public class SupportController {
         return ApiResponse.success(supportService.getTicket(id));
     }
 
+    @GetMapping("/tickets/{id}/messages")
+    public ApiResponse<List<TicketMessageResponse>> getTicketMessages(@PathVariable UUID id) {
+        return ApiResponse.success(supportService.getTicketMessages(id));
+    }
+
     @PostMapping("/tickets/{id}/messages")
     public ApiResponse<TicketMessageResponse> addMessage(
             @PathVariable UUID id,

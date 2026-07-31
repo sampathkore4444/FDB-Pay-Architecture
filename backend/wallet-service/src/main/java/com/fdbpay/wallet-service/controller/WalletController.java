@@ -3,6 +3,7 @@ package com.fdbpay.wallet.service.controller;
 import com.fdbpay.shared.dto.ApiResponse;
 import com.fdbpay.wallet.service.dto.request.CreateWalletRequest;
 import com.fdbpay.wallet.service.dto.request.TopUpRequest;
+import com.fdbpay.wallet.service.dto.request.WalletDebitCreditRequest;
 import com.fdbpay.wallet.service.dto.request.WithdrawRequest;
 import com.fdbpay.wallet.service.dto.response.LedgerEntryResponse;
 import com.fdbpay.wallet.service.dto.response.WalletResponse;
@@ -69,5 +70,22 @@ public class WalletController {
             @RequestParam UUID userId,
             @Valid @RequestBody WithdrawRequest request) {
         return ApiResponse.success(walletService.withdraw(userId, request.getAmount(), request.getIdempotencyKey()));
+    }
+
+    @GetMapping("/owner")
+    public ApiResponse<UUID> getWalletOwner(@RequestParam UUID walletId) {
+        return ApiResponse.success(walletService.getWalletOwner(walletId));
+    }
+
+    @PostMapping("/debit")
+    public ApiResponse<Void> debit(@Valid @RequestBody WalletDebitCreditRequest request) {
+        walletService.debitWallet(request.getWalletId(), request.getAmount(), request.getDescription(), request.getTxnId());
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/credit")
+    public ApiResponse<Void> credit(@Valid @RequestBody WalletDebitCreditRequest request) {
+        walletService.creditWallet(request.getWalletId(), request.getAmount(), request.getDescription(), request.getTxnId());
+        return ApiResponse.success(null);
     }
 }

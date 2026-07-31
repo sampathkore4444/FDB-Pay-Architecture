@@ -40,13 +40,18 @@ public class TransferServiceImpl implements TransferService {
 
     @Override
     @Transactional
-    public TransactionResponse initiateTransfer(TransferRequest request) {
+    public TransactionResponse initiateTransfer(UUID userId, TransferRequest request) {
         checkIdempotency(request.getIdempotencyKey());
+
+        UUID senderWalletId = getWalletIdByUserId(userId);
+        Receiver receiver = resolveReceiver(request.getRecipientIdentifier());
 
         Transaction transaction = Transaction.builder()
                 .idempotencyKey(request.getIdempotencyKey())
                 .type(request.getType())
                 .status(TransactionStatus.PENDING)
+                .senderWalletId(senderWalletId)
+                .receiverWalletId(receiver.walletId())
                 .amount(request.getAmount())
                 .currency("MMK")
                 .description(request.getDescription())
@@ -54,17 +59,17 @@ public class TransferServiceImpl implements TransferService {
                 .build();
 
         transaction = transactionRepository.save(transaction);
-        log.info("Transfer initiated: transactionId={}, type={}, amount={}",
-                transaction.getId(), transaction.getType(), transaction.getAmount());
+        log.info("Transfer initiated: transactionId={}, type={}, amount={}, senderWalletId={}, receiverWalletId={}",
+                transaction.getId(), transaction.getType(), transaction.getAmount(), senderWalletId, receiver.walletId());
 
         try {
-            processTransfer(transaction, request);
+            processTransfer(transaction, request, userId, receiver.userId());
         } catch (Exception e) {
             log.error("Transfer processing failed: transactionId={}", transaction.getId(), e);
             transaction.setStatus(TransactionStatus.FAILED);
             transaction.setFailureReason(e.getMessage());
             transactionRepository.save(transaction);
-            publishEvent(transaction, "FAILED");
+            publishEvent(transaction, "FAILED", senderUserId, receiver.userId());
             throw new BusinessException(ErrorCodes.INTERNAL_ERROR, "Transfer processing failed: " + e.getMessage());
         }
 
@@ -123,12 +128,13 @@ public class TransferServiceImpl implements TransferService {
     @Override
     public Page<TransactionResponse> getHistory(UUID userId, int page, int size) {
         PageRequest pageRequest = PageRequest.of(page, size);
+        UUID walletId = getWalletIdByUserId(userId);
         Page<Transaction> transactions = transactionRepository
-                .findBySenderWalletIdOrderByCreatedAtDesc(userId, pageRequest);
+                .findBySenderWalletIdOrderByCreatedAtDesc(walletId, pageRequest);
         return transactions.map(this::mapToResponse);
     }
 
-    private void processTransfer(Transaction transaction, TransferRequest request) {
+    private void processTransfer(Transaction transaction, TransferRequest request, UUID senderUserId, UUID receiverUserId) {
         UUID txnId = transaction.getId();
         String description = request.getDescription() != null ? request.getDescription() : "Transfer";
 
@@ -166,8 +172,87 @@ public class TransferServiceImpl implements TransferService {
         transaction.setCompletedAt(OffsetDateTime.now());
         transactionRepository.save(transaction);
 
-        publishEvent(transaction, "COMPLETED");
+        publishEvent(transaction, "COMPLETED", senderUserId, receiverUserId);
         log.info("Transfer completed: transactionId={}, amount={}", txnId, transaction.getAmount());
+    }
+
+    private UUID getWalletIdByUserId(UUID userId) {
+        Map<?, ?> response = webClientBuilder.build()
+                .get()
+                .uri(WALLET_SERVICE_BASE + "?userId=" + userId)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+
+        if (response == null) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Sender wallet could not be resolved");
+        }
+        Object data = response.get("data");
+        Object walletId = data != null ? ((Map<?, ?>) data).get("id") : null;
+        if (walletId == null) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Sender wallet could not be resolved");
+        }
+        return UUID.fromString(walletId.toString());
+    }
+
+    private UUID getWalletOwnerUserId(UUID walletId) {
+        Map<?, ?> response = webClientBuilder.build()
+                .get()
+                .uri(uriBuilder -> uriBuilder.scheme("http").host("wallet-service")
+                        .path("/wallet/owner").queryParam("walletId", walletId).build())
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+
+        if (response == null) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient wallet could not be resolved");
+        }
+        Object userId = response.get("data");
+        if (userId == null) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient wallet could not be resolved");
+        }
+        return UUID.fromString(userId.toString());
+    }
+
+    private Receiver resolveReceiver(String recipientIdentifier) {
+        if (recipientIdentifier == null || recipientIdentifier.isBlank()) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient identifier is required");
+        }
+
+        UUID walletId;
+        UUID userId;
+        try {
+            walletId = UUID.fromString(recipientIdentifier);
+            userId = getWalletOwnerUserId(walletId);
+        } catch (IllegalArgumentException notAWalletId) {
+            Map<?, ?> authResponse;
+            try {
+                authResponse = webClientBuilder.build()
+                        .get()
+                        .uri(uriBuilder -> uriBuilder.scheme("http").host("auth-service")
+                                .path("/auth/user/by-phone").queryParam("phone", recipientIdentifier).build())
+                        .retrieve()
+                        .bodyToMono(Map.class)
+                        .block();
+            } catch (Exception e) {
+                throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient not found: " + recipientIdentifier);
+            }
+
+            if (authResponse == null) {
+                throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient not found: " + recipientIdentifier);
+            }
+            Object data = authResponse.get("data");
+            Object receiverUserId = data != null ? ((Map<?, ?>) data).get("id") : null;
+            if (receiverUserId == null) {
+                throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient not found: " + recipientIdentifier);
+            }
+            userId = UUID.fromString(receiverUserId.toString());
+            walletId = getWalletIdByUserId(userId);
+        }
+        return new Receiver(walletId, userId);
+    }
+
+    private record Receiver(UUID walletId, UUID userId) {
     }
 
     private void checkIdempotency(String idempotencyKey) {
@@ -180,7 +265,7 @@ public class TransferServiceImpl implements TransferService {
         redisTemplate.opsForValue().set(cacheKey, "1", 24, TimeUnit.HOURS);
     }
 
-    private void publishEvent(Transaction transaction, String status) {
+    private void publishEvent(Transaction transaction, String status, UUID senderUserId, UUID receiverUserId) {
         try {
             TransactionEvent event = TransactionEvent.builder()
                     .transactionId(transaction.getId())
@@ -188,6 +273,8 @@ public class TransferServiceImpl implements TransferService {
                     .status(status)
                     .senderWalletId(transaction.getSenderWalletId())
                     .receiverWalletId(transaction.getReceiverWalletId())
+                    .senderUserId(senderUserId)
+                    .receiverUserId(receiverUserId)
                     .amount(transaction.getAmount())
                     .currency(transaction.getCurrency())
                     .timestamp(OffsetDateTime.now())

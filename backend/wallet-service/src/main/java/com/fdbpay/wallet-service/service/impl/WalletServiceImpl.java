@@ -59,7 +59,7 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Cacheable(value = "wallet", key = "#userId")
     public WalletResponse getWallet(UUID userId) {
-        Wallet wallet = getActiveWalletByUserId(userId);
+        Wallet wallet = getOrCreateWallet(userId);
         return mapToResponse(wallet);
     }
 
@@ -139,14 +139,14 @@ public class WalletServiceImpl implements WalletService {
 
     @Override
     public Page<LedgerEntryResponse> getLedger(UUID userId, Pageable pageable) {
-        Wallet wallet = getActiveWalletByUserId(userId);
+        Wallet wallet = getOrCreateWallet(userId);
         Page<LedgerEntry> entries = ledgerEntryRepository.findByWalletIdOrderByCreatedAtDesc(wallet.getId(), pageable);
         return entries.map(this::mapToLedgerResponse);
     }
 
     @Override
     public Map<String, Long> getLimits(UUID userId) {
-        Wallet wallet = getActiveWalletByUserId(userId);
+        Wallet wallet = getOrCreateWallet(userId);
         return Map.of(
                 "dailyLimit", wallet.getDailyLimit(),
                 "monthlyLimit", wallet.getMonthlyLimit()
@@ -200,9 +200,28 @@ public class WalletServiceImpl implements WalletService {
         log.info("Credit completed: walletId={}, amount={}, txnId={}", walletId, amount, txnId);
     }
 
+    @Override
+    public UUID getWalletOwner(UUID walletId) {
+        return walletRepository.findById(walletId)
+                .map(Wallet::getUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Wallet", walletId.toString()));
+    }
+
     private Wallet getActiveWalletByUserId(UUID userId) {
         return walletRepository.findActiveWalletByUserIdAndStatus(userId, WalletStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("Wallet", userId.toString()));
+    }
+
+    private Wallet getOrCreateWallet(UUID userId) {
+        return walletRepository.findActiveWalletByUserIdAndStatus(userId, WalletStatus.ACTIVE)
+                .orElseGet(() -> {
+                    Wallet wallet = Wallet.builder()
+                            .userId(userId)
+                            .build();
+                    wallet = walletRepository.save(wallet);
+                    log.info("Wallet auto-created on access: userId={}, walletId={}", userId, wallet.getId());
+                    return wallet;
+                });
     }
 
     private void checkIdempotency(UUID walletId, String idempotencyKey) {

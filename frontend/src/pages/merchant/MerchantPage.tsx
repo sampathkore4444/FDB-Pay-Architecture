@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import { useAuthStore } from '../../store/authStore';
 import { merchantApi, settlementApi, walletApi } from '../../services/api';
 import { Card } from '../../components/cards/Card';
@@ -41,7 +42,12 @@ export function MerchantPage() {
     if (!merchant) return;
     try {
       const qr = await merchantApi.generateQr(merchant.id);
-      setMerchant({ ...merchant, qrStaticUrl: qr.qrData });
+      if (!qr.qrData) {
+        alert('QR generation failed');
+        return;
+      }
+      const dataUrl = await QRCode.toDataURL(qr.qrData, { width: 256, margin: 1 });
+      setMerchant({ ...merchant, qrStaticUrl: dataUrl });
     } catch {
       alert('QR generation failed');
     }

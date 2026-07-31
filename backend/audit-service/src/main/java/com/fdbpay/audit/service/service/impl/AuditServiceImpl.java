@@ -87,11 +87,43 @@ public class AuditServiceImpl implements AuditService {
     }
 
     @Override
+    public Page<AuditEntryResponse> searchAuditLog(String actorId, String action, String resourceType, String resourceId,
+                                                   LocalDate startDate, LocalDate endDate, int page, int size) {
+        if (actorId != null && !actorId.isBlank()) {
+            try {
+                return getAuditLog(actorId, page, size);
+            } catch (IllegalArgumentException e) {
+                return Page.empty();
+            }
+        }
+        if (action != null && !action.isBlank()) {
+            return getActionAuditLog(action, page, size);
+        }
+        if (resourceType != null && !resourceType.isBlank()) {
+            if (resourceId != null && !resourceId.isBlank()) {
+                return getResourceAuditLog(resourceType, resourceId, page, size);
+            }
+            Page<AuditEntry> entries = auditEntryRepository
+                    .findByResourceTypeOrderByCreatedAtDesc(resourceType, PageRequest.of(page, size));
+            return entries.map(this::mapToResponse);
+        }
+        if (startDate != null && endDate != null) {
+            OffsetDateTime start = startDate.atStartOfDay(ZoneOffset.UTC).toOffsetDateTime();
+            OffsetDateTime end = endDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toOffsetDateTime();
+            Page<AuditEntry> entries = auditEntryRepository
+                    .findByCreatedAtBetweenOrderByCreatedAtDesc(start, end, PageRequest.of(page, size));
+            return entries.map(this::mapToResponse);
+        }
+        return getAllAuditLogs(page, size);
+    }
+
+    @Override
     public AuditSummaryResponse getSummary(LocalDate startDate, LocalDate endDate) {
         OffsetDateTime start = startDate.atStartOfDay(ZoneOffset.UTC).toOffsetDateTime();
         OffsetDateTime end = endDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toOffsetDateTime();
 
         long totalActions = auditEntryRepository.countByCreatedAtBetween(start, end);
+        long uniqueActors = auditEntryRepository.countDistinctActorIdByCreatedAtBetween(start, end);
 
         Map<String, Long> byAction = new LinkedHashMap<>();
         List<Object[]> actionCounts = auditEntryRepository.countByActionBetween(start, end);
@@ -105,8 +137,17 @@ public class AuditServiceImpl implements AuditService {
             byActorType.put((String) row[0], (Long) row[1]);
         }
 
+        List<AuditSummaryResponse.TopAction> topActions = byAction.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .limit(5)
+                .map(e -> AuditSummaryResponse.TopAction.builder().action(e.getKey()).count(e.getValue()).build())
+                .toList();
+
         return AuditSummaryResponse.builder()
                 .totalActions(totalActions)
+                .totalEvents(totalActions)
+                .uniqueActors(uniqueActors)
+                .topActions(topActions)
                 .byAction(byAction)
                 .byActorType(byActorType)
                 .startDate(startDate)

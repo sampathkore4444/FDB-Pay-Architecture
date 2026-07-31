@@ -1,0 +1,16 @@
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/KycServiceApplication.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/consumer/KycEventConsumer.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/controller/AdminKycController.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/controller/KycController.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/dto/request/AdminKycReviewRequest.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/dto/request/DocumentRequest.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/dto/request/KycReviewRequest.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/dto/request/KycSubmitRequest.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/dto/response/AdminKycRequestResponse.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/dto/response/KycStatusResponse.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/model/KycAudit.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/model/KycDocument.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/repository/KycAuditRepository.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/repository/KycDocumentMongoRepository.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/service/KycService.java
+/opt/FDB_PAY/backend/kyc-service/src/main/java/com/fdbpay/kyc-service/service/impl/KycServiceImpl.java

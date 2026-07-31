@@ -190,28 +190,30 @@ export interface TicketMessage {
   id: string;
   ticketId: string;
   senderId: string;
-  senderName: string;
+  senderType: string;
   message: string;
+  attachments?: string | null;
   createdAt: string;
 }
 
 export interface SupportTicket {
   id: string;
-  userId: string;
-  userName: string;
+  corporateUserId: string;
   subject: string;
   category: string;
   priority: string;
-  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'ESCALATED' | 'CLOSED';
-  messages: TicketMessage[];
-  assignedTo?: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'WAITING_CUSTOMER' | 'WAITING_INTERNAL' | 'RESOLVED' | 'CLOSED';
+  assignedManagerId?: string;
+  messageCount: number;
+  lastResponseAt?: string;
+  slaDeadline?: string;
   createdAt: string;
   updatedAt: string;
-  resolvedAt?: string;
+  messages?: TicketMessage[];
 }
 
 export interface SupportStats {
   totalOpen: number;
   totalResolved: number;
-  avgResponseHours: number;
+  avgResponseTimeHours: number;
 }

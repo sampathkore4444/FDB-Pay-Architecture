@@ -3,6 +3,8 @@ package com.fdbpay.support.service.model;
 import com.fdbpay.support.service.model.enums.SenderType;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -33,6 +35,7 @@ public class TicketMessage {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String message;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String attachments;
 

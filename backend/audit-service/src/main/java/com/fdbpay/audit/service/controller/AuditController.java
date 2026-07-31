@@ -29,6 +29,21 @@ public class AuditController {
         return ApiResponse.success(auditService.getAllAuditLogs(page, size));
     }
 
+    @GetMapping("/log")
+    public ApiResponse<Page<AuditEntryResponse>> searchLogs(
+            @RequestParam(required = false) String actor,
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) String resourceType,
+            @RequestParam(required = false) String resource,
+            @RequestParam(required = false) String resourceId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        String type = resourceType != null ? resourceType : resource;
+        return ApiResponse.success(auditService.searchAuditLog(actor, action, type, resourceId, startDate, endDate, page, size));
+    }
+
     @PostMapping("/log")
     public ApiResponse<AuditEntryResponse> logAction(@RequestBody AuditLogRequest request) {
         return ApiResponse.success(auditService.logAction(request));
@@ -51,6 +66,15 @@ public class AuditController {
         return ApiResponse.success(auditService.getResourceAuditLog(type, id, page, size));
     }
 
+    @GetMapping("/resource")
+    public ApiResponse<Page<AuditEntryResponse>> getAuditLogByResourceQuery(
+            @RequestParam String resourceType,
+            @RequestParam String resourceId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(auditService.getResourceAuditLog(resourceType, resourceId, page, size));
+    }
+
     @GetMapping("/action/{action}")
     public ApiResponse<Page<AuditEntryResponse>> getAuditLogByAction(
             @PathVariable String action,
@@ -61,21 +85,25 @@ public class AuditController {
 
     @GetMapping("/summary")
     public ApiResponse<AuditSummaryResponse> getSummary(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return ApiResponse.success(auditService.getSummary(startDate, endDate));
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        LocalDate from = startDate != null ? startDate : LocalDate.now().minusDays(90);
+        LocalDate to = endDate != null ? endDate : LocalDate.now();
+        return ApiResponse.success(auditService.getSummary(from, to));
     }
 
     @GetMapping("/export")
     public ResponseEntity<String> exportAuditLog(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(defaultValue = "csv") String format) {
 
-        String content = auditService.exportAuditLog(startDate, endDate, format);
+        LocalDate from = startDate != null ? startDate : LocalDate.now().minusDays(90);
+        LocalDate to = endDate != null ? endDate : LocalDate.now();
+        String content = auditService.exportAuditLog(from, to, format);
 
         String contentType = "csv".equalsIgnoreCase(format) ? "text/csv" : "application/json";
-        String filename = "audit-log-" + startDate + "-to-" + endDate + "." + format.toLowerCase();
+        String filename = "audit-log-" + from + "-to-" + to + "." + format.toLowerCase();
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)

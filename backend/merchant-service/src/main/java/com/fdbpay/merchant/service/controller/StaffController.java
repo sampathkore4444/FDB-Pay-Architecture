@@ -22,8 +22,9 @@ public class StaffController {
     @PostMapping
     public ApiResponse<StaffAccountResponse> addStaff(
             @RequestParam UUID merchantId,
+            @RequestParam UUID userId,
             @Valid @RequestBody AddStaffRequest request) {
-        return ApiResponse.success(staffService.addStaff(merchantId, request));
+        return ApiResponse.success(staffService.addStaff(merchantId, userId, request));
     }
 
     @GetMapping

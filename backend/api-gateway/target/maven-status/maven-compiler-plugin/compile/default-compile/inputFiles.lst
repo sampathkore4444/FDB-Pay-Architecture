@@ -1,0 +1,2 @@
+/opt/FDB_PAY/backend/api-gateway/src/main/java/com/fdbpay/apigateway/ApiGatewayApplication.java
+/opt/FDB_PAY/backend/api-gateway/src/main/java/com/fdbpay/apigateway/config/AuthFilter.java

@@ -6,6 +6,15 @@ import type {
 } from '../types';
 import { useAuthStore } from '../store/authStore';
 
+function safeParseInvoiceItems(items: string): InvoiceItem[] {
+  try {
+    const parsed = JSON.parse(items);
+    return Array.isArray(parsed) ? (parsed as InvoiceItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 const api = axios.create({
   baseURL: '/v1',
   headers: { 'Content-Type': 'application/json' },
@@ -52,7 +61,19 @@ export const walletApi = {
     api.get<ApiResponse<Wallet>>(`/wallet?userId=${userId}`).then((r) => r.data.data),
 
   getLedger: (userId: string, page = 0, size = 20) =>
-    api.get<ApiResponse<{ entries: Transaction[] }>>(`/wallet/ledger?userId=${userId}&page=${page}&size=${size}`).then((r) => r.data.data),
+    api.get<ApiResponse<{ content: Array<{ id: string; type: string; amount: number; description: string; createdAt: string }> }>>(`/wallet/ledger?userId=${userId}&page=${page}&size=${size}`).then((r) => ({
+      entries: (r.data.data?.content || []).map((e) => ({
+        id: e.id,
+        idempotencyKey: '',
+        type: e.type,
+        status: 'COMPLETED' as const,
+        amount: e.amount,
+        fee: 0,
+        currency: 'MMK',
+        description: e.description,
+        createdAt: e.createdAt,
+      })),
+    })),
 
   topUp: (userId: string, amount: number, channel: string) =>
     api.post<ApiResponse<Wallet>>(`/wallet/topup?userId=${userId}`, { amount, channel, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
@@ -74,13 +95,13 @@ export const transferApi = {
 
 export const merchantApi = {
   register: (userId: string, data: { businessName: string; businessType?: string; category?: string; address?: string }) =>
-    api.post<ApiResponse<Merchant>>(`/merchant/register?userId=${userId}`, data).then((r) => r.data.data),
+    api.post<ApiResponse<Merchant>>(`/merchant?userId=${userId}`, data).then((r) => r.data.data),
 
-  getProfile: (merchantId: string) =>
-    api.get<ApiResponse<Merchant>>(`/merchant/profile?merchantId=${merchantId}`).then((r) => r.data.data),
+  getProfile: (userId: string) =>
+    api.get<ApiResponse<Merchant>>(`/merchant/by-user/${userId}`).then((r) => r.data.data),
 
-  generateQr: (merchantId: string, type = 'static', amount?: number) =>
-    api.post<ApiResponse<{ qrData: string }>>(`/merchant/qr/generate?merchantId=${merchantId}&type=${type}${amount ? `&amount=${amount}` : ''}`).then((r) => r.data.data),
+  generateQr: (merchantId: string, _type = 'static', _amount?: number) =>
+    api.get<ApiResponse<{ qrUrl: string; deepLink: string }>>(`/merchant/${merchantId}/qr`).then((r) => ({ qrData: r.data.data?.deepLink || r.data.data?.qrUrl || '' })),
 };
 
 export const billApi = {
@@ -104,8 +125,8 @@ export const adminApi = {
   getPendingKyc: (page = 0, size = 20) =>
     api.get<ApiResponse<{ requests: unknown[] }>>(`/admin/kyc/pending?page=${page}&size=${size}`).then((r) => r.data.data),
 
-  getKycPending: (page = 0, size = 20) =>
-    api.get<ApiResponse<{ requests: unknown[] }>>(`/admin/kyc/pending?page=${page}&size=${size}`).then((r) => r.data.data),
+  getKycPending: (page = 0, size = 20, status?: string) =>
+    api.get<ApiResponse<{ requests: unknown[] }>>(`/admin/kyc/pending?page=${page}&size=${size}${status ? `&status=${status}` : ''}`).then((r) => r.data.data),
 
   reviewKyc: (kycId: string, data: { status: string; reason?: string }) =>
     api.put<ApiResponse<void>>(`/admin/kyc/${kycId}/review`, data).then((r) => r.data.data),
@@ -177,37 +198,71 @@ export const disputeApi = {
     api.post<ApiResponse<void>>(`/disputes/${disputeId}/resolve`, data).then((r) => r.data.data),
 
   getMyDisputes: (userId: string) =>
-    api.get<ApiResponse<{ id: string; transactionId: string; type: string; amount: number; description: string; status: string; evidenceList: { id: string; description: string; createdAt: string }[]; createdAt: string; resolvedAt?: string }[]>>(`/disputes/my?userId=${userId}`).then((r) => r.data.data || []),
+    api.get<ApiResponse<{ content: { id: string; transactionId: string; type: string; amount: number; description: string; status: string; evidenceList: { id: string; description: string; createdAt: string }[]; createdAt: string; resolvedAt?: string }[] }>>(`/disputes/my?userId=${userId}`).then((r) => r.data.data?.content || []),
 
   getAllDisputes: (page = 0, size = 50) =>
-    api.get<ApiResponse<{ id: string; transactionId: string; type: string; amount: number; description: string; status: string; evidenceList: { id: string; description: string; createdAt: string }[]; createdAt: string; resolvedAt?: string }[]>>(`/disputes/all?page=${page}&size=${size}`).then((r) => r.data.data || []),
+    api.get<ApiResponse<{ content: { id: string; transactionId: string; type: string; amount: number; description: string; status: string; evidenceList: { id: string; description: string; createdAt: string }[]; createdAt: string; resolvedAt?: string }[] }>>(`/disputes/all?page=${page}&size=${size}`).then((r) => r.data.data?.content || []),
 
   getStats: () =>
     api.get<ApiResponse<{ totalOpen: number; totalResolved: number; avgResolutionDays: number }>>('/disputes/stats').then((r) => r.data.data),
 };
 
 export const settlementApi = {
-  trigger: (userId: string) =>
-    api.post<ApiResponse<{ batchId: string }>>(`/settlements/trigger?userId=${userId}`).then((r) => r.data.data),
+  trigger: (merchantId: string) =>
+    api.post<ApiResponse<{ id: string; batchId: string }>>('/settlements/trigger', { merchantId }).then((r) => r.data.data),
 
   getSettlement: (batchId: string) =>
     api.get<ApiResponse<Record<string, unknown>>>(`/settlements/${batchId}`).then((r) => r.data.data),
 
   getMerchantSettlements: (merchantId: string) =>
-    api.get<ApiResponse<{ id: string; status: string; totalAmount: number; totalFees: number; merchantCount: number; reconciliationStatus: string; createdAt: string }[]>>(`/settlements/merchant?merchantId=${merchantId}`).then((r) => r.data.data || []),
+    api.get<ApiResponse<{ content: { id: string; status: string; grossAmount: number; fees: number; netAmount: number; settlementRef?: string; transactionCount: number; createdAt: string }[] }>>(`/settlements/merchant/${merchantId}`).then((r) => (r.data.data?.content || []).map((s) => ({
+      id: s.id,
+      status: s.status,
+      totalAmount: s.netAmount ?? s.grossAmount ?? 0,
+      totalFees: s.fees ?? 0,
+      transactionCount: s.transactionCount ?? 0,
+      settlementRef: s.settlementRef,
+      createdAt: s.createdAt,
+    }))),
 
   getBatchSummary: () =>
-    api.get<ApiResponse<{ id: string; status: string; totalAmount: number; totalFees: number; merchantCount: number; reconciliationStatus: string; createdAt: string }[]>>('/settlements/summary').then((r) => r.data.data || []),
+    api.get<ApiResponse<Record<string, unknown>>>('/settlements/summary').then((r) => r.data.data || {}),
 };
 
 export const auditApi = {
   getAuditLog: (params: Record<string, string> = {}) => {
     const query = new URLSearchParams(params).toString();
-    return api.get<ApiResponse<{ id: string; actorId: string; actorName?: string; action: string; resourceType: string; resourceId: string; details?: string; timestamp: string }[]>>(`/audit/log${query ? `?${query}` : ''}`).then((r) => r.data.data || []);
+    return api
+      .get<ApiResponse<{
+        content: { id: string; actorId: string; actorName?: string; action: string; resourceType: string; resourceId: string; createdAt: string; newValues?: string }[];
+      }>>(`/audit/log${query ? `?${query}` : ''}`)
+      .then((r) => (r.data.data?.content || []).map((e) => ({
+        id: e.id,
+        actorId: e.actorId,
+        actorName: e.actorName,
+        action: e.action,
+        resourceType: e.resourceType,
+        resourceId: e.resourceId,
+        details: e.newValues,
+        timestamp: e.createdAt,
+      })));
   },
 
   getResourceAuditLog: (resourceType: string, resourceId: string) =>
-    api.get<ApiResponse<{ id: string; actorId: string; actorName?: string; action: string; resourceType: string; resourceId: string; details?: string; timestamp: string }[]>>(`/audit/resource?resourceType=${resourceType}&resourceId=${resourceId}`).then((r) => r.data.data || []),
+    api
+      .get<ApiResponse<{
+        content: { id: string; actorId: string; actorName?: string; action: string; resourceType: string; resourceId: string; createdAt: string; newValues?: string }[];
+      }>>(`/audit/resource?resourceType=${resourceType}&resourceId=${resourceId}`)
+      .then((r) => (r.data.data?.content || []).map((e) => ({
+        id: e.id,
+        actorId: e.actorId,
+        actorName: e.actorName,
+        action: e.action,
+        resourceType: e.resourceType,
+        resourceId: e.resourceId,
+        details: e.newValues,
+        timestamp: e.createdAt,
+      }))),
 
   getSummary: () =>
     api.get<ApiResponse<{ totalEvents: number; uniqueActors: number; topActions: { action: string; count: number }[] }>>('/audit/summary').then((r) => r.data.data),
@@ -217,17 +272,17 @@ export const auditApi = {
 };
 
 export const staffApi = {
-  addStaff: (ownerId: string, data: { userId: string; role: string; dailyLimit: number }) =>
-    api.post<ApiResponse<{ id: string }>>(`/staff?merchantId=${ownerId}`, data).then((r) => r.data.data),
+  addStaff: (merchantId: string, userId: string, data: { userId: string; role: string; dailyLimit: number }) =>
+    api.post<ApiResponse<{ id: string }>>(`/staff?merchantId=${merchantId}&userId=${userId}`, { userId: data.userId, role: data.role.toUpperCase(), dailyLimit: data.dailyLimit, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
 
   removeStaff: (ownerId: string, staffId: string) =>
     api.delete<ApiResponse<void>>(`/staff/${staffId}?merchantId=${ownerId}`).then((r) => r.data.data),
 
   getStaff: (ownerId: string) =>
-    api.get<ApiResponse<{ id: string; userId: string; userName: string; userPhone: string; role: string; dailyLimit: number; status: string }[]>>(`/staff?merchantId=${ownerId}`).then((r) => r.data.data || []),
+    api.get<ApiResponse<{ id: string; userId: string; userName: string; userPhone: string; role: string; dailyLimit: number; status: string }[]>>(`/staff?merchantId=${ownerId}`).then((r) => (r.data.data || []).map((s) => ({ ...s, role: (s.role || '').toLowerCase() }))),
 
   changeRole: (ownerId: string, staffId: string, newRole: string) =>
-    api.put<ApiResponse<void>>(`/staff/${staffId}/role?merchantId=${ownerId}&role=${newRole}`).then((r) => r.data.data),
+    api.put<ApiResponse<void>>(`/staff/${staffId}/role?merchantId=${ownerId}&role=${newRole.toUpperCase()}`).then((r) => r.data.data),
 };
 
 export const directoryApi = {
@@ -284,8 +339,21 @@ export const requestMoneyApi = {
 };
 
 export const invoiceApi = {
-  create: (userId: string, data: { customerPhone: string; customerName: string; items: Omit<InvoiceItem, 'id'>[]; tax: number; dueDate: string }) =>
-    api.post<ApiResponse<Invoice>>(`/invoices?userId=${userId}`, { ...data, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
+  create: (userId: string, data: { customerPhone: string; customerName: string; items: Omit<InvoiceItem, 'id'>[]; tax: number; dueDate: string }) => {
+    const subtotal = data.items.reduce((sum, item) => sum + item.quantity * item.price, 0);
+    return api
+      .post<ApiResponse<Invoice>>(`/invoices?userId=${userId}`, {
+        customerPhone: data.customerPhone,
+        customerName: data.customerName,
+        items: JSON.stringify(data.items),
+        subtotal,
+        tax: data.tax,
+        total: subtotal + data.tax,
+        dueDate: data.dueDate,
+        idempotencyKey: `idem_${Date.now()}`,
+      })
+      .then((r) => r.data.data);
+  },
 
   send: (userId: string, invoiceId: string) =>
     api.put<ApiResponse<void>>(`/invoices/${invoiceId}/send?userId=${userId}`).then((r) => r.data.data),
@@ -297,7 +365,12 @@ export const invoiceApi = {
     api.put<ApiResponse<void>>(`/invoices/${invoiceId}/cancel?userId=${userId}`).then((r) => r.data.data),
 
   getByMerchant: (userId: string) =>
-    api.get<ApiResponse<Invoice[]>>(`/invoices?userId=${userId}`).then((r) => r.data.data || []),
+    api.get<ApiResponse<{ content: Invoice[] }>>(`/invoices?userId=${userId}&page=0&size=100`).then((r) =>
+      ((r.data.data?.content || []) as Invoice[]).map((inv) => ({
+        ...inv,
+        items: typeof inv.items === 'string' ? safeParseInvoiceItems(inv.items) : inv.items,
+      })),
+    ),
 };
 
 export const remittanceApi = {
@@ -325,10 +398,16 @@ export const promotionsApi = {
     api.post<ApiResponse<Promotion>>(`/promotions/apply?userId=${userId}`, { code, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
 
   getCashbackWallet: (userId: string) =>
-    api.get<ApiResponse<CashbackWallet>>(`/promotions/cashback?userId=${userId}`).then((r) => r.data.data),
+    api.get<ApiResponse<CashbackWallet | null>>(`/promotions/cashback-wallet?userId=${userId}`).then((r) => ({
+      id: r.data.data?.id || '',
+      balance: r.data.data?.balance ?? 0,
+      totalEarned: r.data.data?.totalEarned ?? 0,
+      totalRedeemed: r.data.data?.totalRedeemed ?? 0,
+      currency: 'MMK',
+    })),
 
   redeemCashback: (userId: string, amount: number) =>
-    api.post<ApiResponse<void>>(`/promotions/cashback/redeem?userId=${userId}`, { amount, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
+    api.post<ApiResponse<void>>(`/promotions/cashback-redeem?userId=${userId}`, { amount, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
 };
 
 export const agentApi = {
@@ -361,19 +440,22 @@ export const supportApi = {
     api.post<ApiResponse<SupportTicket>>(`/support/tickets?userId=${userId}`, { ...data, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
 
   addMessage: (userId: string, ticketId: string, message: string) =>
-    api.post<ApiResponse<TicketMessage>>(`/support/tickets/message?userId=${userId}&ticketId=${ticketId}`, { message }).then((r) => r.data.data),
+    api.post<ApiResponse<TicketMessage>>(`/support/tickets/${ticketId}/messages?userId=${userId}`, { message }).then((r) => r.data.data),
+
+  getMessages: (ticketId: string) =>
+    api.get<ApiResponse<TicketMessage[]>>(`/support/tickets/${ticketId}/messages`).then((r) => r.data.data || []),
 
   getMyTickets: (userId: string) =>
-    api.get<ApiResponse<SupportTicket[]>>(`/support/tickets/my?userId=${userId}`).then((r) => r.data.data || []),
+    api.get<ApiResponse<{ content: SupportTicket[] }>>(`/support/my-tickets?userId=${userId}&page=0&size=100`).then((r) => r.data.data.content || []),
 
   getTicket: (ticketId: string) =>
     api.get<ApiResponse<SupportTicket>>(`/support/tickets/${ticketId}`).then((r) => r.data.data),
 
   resolve: (userId: string, ticketId: string) =>
-    api.post<ApiResponse<void>>(`/support/tickets/resolve?userId=${userId}&ticketId=${ticketId}`).then((r) => r.data.data),
+    api.put<ApiResponse<SupportTicket>>(`/support/tickets/${ticketId}/resolve?userId=${userId}`).then((r) => r.data.data),
 
-  escalate: (userId: string, ticketId: string) =>
-    api.post<ApiResponse<void>>(`/support/tickets/escalate?userId=${userId}&ticketId=${ticketId}`).then((r) => r.data.data),
+  escalate: (_userId: string, ticketId: string) =>
+    api.put<ApiResponse<SupportTicket>>(`/support/tickets/${ticketId}/escalate`, { newPriority: 'URGENT', reason: 'Escalated by user' }).then((r) => r.data.data),
 
   getStats: () =>
     api.get<ApiResponse<SupportStats>>('/support/stats').then((r) => r.data.data),

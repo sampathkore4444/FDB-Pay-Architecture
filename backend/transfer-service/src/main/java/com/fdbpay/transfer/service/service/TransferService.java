@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public interface TransferService {
 
-    TransactionResponse initiateTransfer(TransferRequest request);
+    TransactionResponse initiateTransfer(UUID userId, TransferRequest request);
 
     TransactionResponse getTransferStatus(UUID transactionId);
 

@@ -32,6 +32,11 @@ public class MerchantController {
         return ApiResponse.success(merchantService.getProfile(id));
     }
 
+    @GetMapping("/by-user/{userId}")
+    public ApiResponse<MerchantResponse> getProfileByUserId(@PathVariable UUID userId) {
+        return ApiResponse.success(merchantService.getProfileByUserId(userId));
+    }
+
     @PutMapping("/{id}")
     public ApiResponse<MerchantResponse> updateProfile(
             @PathVariable UUID id,

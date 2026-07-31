@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/modals/Modal';
 import { formatDate, cn } from '../../utils';
-import type { SupportTicket, SupportStats } from '../../types';
+import type { SupportTicket, SupportStats, TicketMessage } from '../../types';
 
 export function SupportPage() {
   const { t } = useTranslation();
@@ -18,6 +18,7 @@ export function SupportPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showDetail, setShowDetail] = useState<SupportTicket | null>(null);
+  const [messages, setMessages] = useState<TicketMessage[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const [subject, setSubject] = useState('');
@@ -70,13 +71,27 @@ export function SupportPage() {
     try {
       await supportApi.addMessage(user.id, showDetail.id, replyMessage);
       setReplyMessage('');
-      const updated = await supportApi.getTicket(showDetail.id);
+      const [updated, updatedMessages] = await Promise.all([
+        supportApi.getTicket(showDetail.id),
+        supportApi.getMessages(showDetail.id),
+      ]);
       setShowDetail(updated);
+      setMessages(updatedMessages);
       await loadData();
     } catch (err) {
       console.error(err);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const openDetail = async (ticket: SupportTicket) => {
+    setShowDetail(ticket);
+    setMessages([]);
+    try {
+      setMessages(await supportApi.getMessages(ticket.id));
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -112,6 +127,8 @@ export function SupportPage() {
     const m: Record<string, string> = {
       OPEN: 'bg-yellow-100 text-yellow-800',
       IN_PROGRESS: 'bg-blue-100 text-blue-800',
+      WAITING_CUSTOMER: 'bg-purple-100 text-purple-800',
+      WAITING_INTERNAL: 'bg-indigo-100 text-indigo-800',
       RESOLVED: 'bg-green-100 text-green-800',
       ESCALATED: 'bg-red-100 text-red-800',
       CLOSED: 'bg-gray-100 text-gray-600',
@@ -147,7 +164,7 @@ export function SupportPage() {
           </Card>
           <Card>
             <p className="text-sm text-gray-500">{t.support.avgResponseTime}</p>
-            <p className="text-2xl font-bold text-blue-600">{stats.avgResponseHours} {t.support.hours}</p>
+            <p className="text-2xl font-bold text-blue-600">{stats.avgResponseTimeHours} {t.support.hours}</p>
           </Card>
         </div>
       )}
@@ -195,11 +212,11 @@ export function SupportPage() {
                       {t.support.priorities[ticket.priority as keyof typeof t.support.priorities]}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500">{ticket.category} &middot; {ticket.messages.length} messages</p>
+                  <p className="text-sm text-gray-500">{ticket.category} &middot; {ticket.messageCount} messages</p>
                   <p className="text-xs text-gray-400">{formatDate(ticket.createdAt)}</p>
                 </div>
                 <div className="flex space-x-2">
-                  <Button size="sm" variant="ghost" onClick={() => setShowDetail(ticket)}>
+                  <Button size="sm" variant="ghost" onClick={() => openDetail(ticket)}>
                     {t.common.viewDetails}
                   </Button>
                   {tab === 'manager' && (ticket.status === 'OPEN' || ticket.status === 'IN_PROGRESS') && (
@@ -291,9 +308,9 @@ export function SupportPage() {
             <div>
               <h4 className="font-medium text-gray-900 mb-2">{t.support.ticketDetail}</h4>
               <div className="space-y-2 max-h-60 overflow-y-auto">
-                {showDetail.messages.map((msg) => (
+                {messages.map((msg) => (
                   <div key={msg.id} className={cn('rounded-lg p-3 text-sm', msg.senderId === user?.id ? 'bg-blue-50 ml-8' : 'bg-gray-50 mr-8')}>
-                    <p className="font-medium text-gray-700">{msg.senderName}</p>
+                    <p className="font-medium text-gray-700">{msg.senderType}</p>
                     <p className="text-gray-600 mt-1">{msg.message}</p>
                     <p className="text-xs text-gray-400 mt-1">{formatDate(msg.createdAt)}</p>
                   </div>
@@ -315,7 +332,7 @@ export function SupportPage() {
               </div>
             )}
 
-            {tab === 'manager' && (showDetail.status === 'OPEN' || showDetail.status === 'IN_PROGRESS' || showDetail.status === 'ESCALATED') && (
+            {tab === 'manager' && (showDetail.status === 'OPEN' || showDetail.status === 'IN_PROGRESS') && (
               <div className="flex space-x-3 pt-2 border-t">
                 <Button onClick={() => handleResolve(showDetail.id)} loading={submitting} className="flex-1">
                   {t.support.resolve}

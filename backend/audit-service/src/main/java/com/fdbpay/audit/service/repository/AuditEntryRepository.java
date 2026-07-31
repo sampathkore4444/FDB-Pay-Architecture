@@ -23,6 +23,10 @@ public interface AuditEntryRepository extends JpaRepository<AuditEntry, UUID> {
 
     List<AuditEntry> findByCreatedAtBetweenOrderByCreatedAtDesc(OffsetDateTime start, OffsetDateTime end);
 
+    Page<AuditEntry> findByCreatedAtBetweenOrderByCreatedAtDesc(OffsetDateTime start, OffsetDateTime end, Pageable pageable);
+
+    Page<AuditEntry> findByResourceTypeOrderByCreatedAtDesc(String resourceType, Pageable pageable);
+
     long countByAction(String action);
 
     long countByActorType(String actorType);
@@ -32,6 +36,9 @@ public interface AuditEntryRepository extends JpaRepository<AuditEntry, UUID> {
 
     @Query("SELECT a.actorType, COUNT(a) FROM AuditEntry a WHERE a.createdAt BETWEEN :start AND :end GROUP BY a.actorType")
     List<Object[]> countByActorTypeBetween(@Param("start") OffsetDateTime start, @Param("end") OffsetDateTime end);
+
+    @Query("SELECT COUNT(DISTINCT a.actorId) FROM AuditEntry a WHERE a.createdAt BETWEEN :start AND :end")
+    long countDistinctActorIdByCreatedAtBetween(@Param("start") OffsetDateTime start, @Param("end") OffsetDateTime end);
 
     long countByCreatedAtBetween(OffsetDateTime start, OffsetDateTime end);
 }

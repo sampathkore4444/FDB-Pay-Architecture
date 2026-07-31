@@ -1,6 +1,7 @@
 package com.fdbpay.auth.service.impl;
 
 import com.fdbpay.auth.dto.request.*;
+import com.fdbpay.auth.dto.response.AdminUserResponse;
 import com.fdbpay.auth.dto.response.AuthResponse;
 import com.fdbpay.auth.dto.response.UserProfileResponse;
 import com.fdbpay.auth.model.User;
@@ -27,7 +28,9 @@ import org.springframework.beans.factory.annotation.Value;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Slf4j
@@ -293,5 +296,33 @@ public class AuthServiceImpl implements AuthService {
         } catch (Exception e) {
             log.error("Failed to publish notification event: {}", e.getMessage());
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AdminUserResponse> getUsers(String search, UserStatus status, int page, int size) {
+        List<User> users = userRepository.findAll().stream()
+                .filter(u -> status == null || u.getStatus() == status)
+                .filter(u -> search == null || search.isBlank()
+                        || u.getName().toLowerCase().contains(search.toLowerCase())
+                        || u.getPhone().contains(search))
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .toList();
+
+        return users.stream()
+                .skip((long) page * size)
+                .limit(size)
+                .map(AdminUserResponse::from)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public void updateUserStatus(UUID userId, UserStatus status, String reason) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.USER_NOT_FOUND, "User not found with id: " + userId));
+        user.setStatus(status);
+        userRepository.save(user);
+        log.info("User {} status updated to {} reason={}", userId, status, reason);
     }
 }

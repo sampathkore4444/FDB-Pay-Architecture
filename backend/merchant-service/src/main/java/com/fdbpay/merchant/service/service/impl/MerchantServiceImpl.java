@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -67,6 +68,14 @@ public class MerchantServiceImpl implements MerchantService {
     public MerchantResponse getProfile(UUID merchantId) {
         Merchant merchant = merchantRepository.findById(merchantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Merchant", merchantId.toString()));
+        return mapToResponse(merchant);
+    }
+
+    @Override
+    public MerchantResponse getProfileByUserId(UUID userId) {
+        Merchant merchant = merchantRepository.findByUserId(userId).stream()
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Merchant", "userId=" + userId));
         return mapToResponse(merchant);
     }
 
@@ -161,5 +170,35 @@ public class MerchantServiceImpl implements MerchantService {
                 .createdAt(merchant.getCreatedAt())
                 .updatedAt(merchant.getUpdatedAt())
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MerchantResponse> getMerchants(String search, MerchantStatus status, int page, int size) {
+        List<Merchant> merchants = merchantRepository.findAll().stream()
+                .filter(m -> status == null || m.getStatus() == status)
+                .filter(m -> search == null || search.isBlank()
+                        || m.getBusinessName().toLowerCase().contains(search.toLowerCase())
+                        || (m.getCategory() != null && m.getCategory().toLowerCase().contains(search.toLowerCase())))
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .toList();
+
+        return merchants.stream()
+                .skip((long) page * size)
+                .limit(size)
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public MerchantResponse updateStatus(UUID merchantId, MerchantStatus status, String reason) {
+        Merchant merchant = merchantRepository.findById(merchantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Merchant", merchantId.toString()));
+        merchant.setStatus(status);
+        merchant.setUpdatedAt(OffsetDateTime.now());
+        merchant = merchantRepository.save(merchant);
+        log.info("Merchant {} status updated to {} reason={}", merchantId, status, reason);
+        return mapToResponse(merchant);
     }
 }

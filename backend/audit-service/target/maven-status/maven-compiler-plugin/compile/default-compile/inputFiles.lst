@@ -1,0 +1,10 @@
+/opt/FDB_PAY/backend/audit-service/src/main/java/com/fdbpay/audit/service/AuditServiceApplication.java
+/opt/FDB_PAY/backend/audit-service/src/main/java/com/fdbpay/audit/service/consumer/AuditEventConsumer.java
+/opt/FDB_PAY/backend/audit-service/src/main/java/com/fdbpay/audit/service/controller/AuditController.java
+/opt/FDB_PAY/backend/audit-service/src/main/java/com/fdbpay/audit/service/dto/request/AuditLogRequest.java
+/opt/FDB_PAY/backend/audit-service/src/main/java/com/fdbpay/audit/service/dto/response/AuditEntryResponse.java
+/opt/FDB_PAY/backend/audit-service/src/main/java/com/fdbpay/audit/service/dto/response/AuditSummaryResponse.java
+/opt/FDB_PAY/backend/audit-service/src/main/java/com/fdbpay/audit/service/model/AuditEntry.java
+/opt/FDB_PAY/backend/audit-service/src/main/java/com/fdbpay/audit/service/repository/AuditEntryRepository.java
+/opt/FDB_PAY/backend/audit-service/src/main/java/com/fdbpay/audit/service/service/AuditService.java
+/opt/FDB_PAY/backend/audit-service/src/main/java/com/fdbpay/audit/service/service/impl/AuditServiceImpl.java

@@ -10,12 +10,12 @@ import { toast } from 'sonner';
 interface AmlAlert {
   id: string;
   userId: string;
-  userName: string;
+  userName?: string;
   type: string;
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  amount: number;
-  status: 'OPEN' | 'DISMISSED' | 'ESCALATED' | 'BLOCKED';
-  description: string;
+  amount?: number;
+  status: 'OPEN' | 'INVESTIGATING' | 'RESOLVED' | 'FALSE_POSITIVE';
+  description?: string;
   createdAt: string;
 }
 
@@ -90,8 +90,8 @@ export function AmlAlertsPage() {
 
   const statusColor = (s: string) => {
     if (s === 'OPEN') return 'bg-yellow-100 text-yellow-800';
-    if (s === 'ESCALATED') return 'bg-orange-100 text-orange-800';
-    if (s === 'BLOCKED') return 'bg-red-100 text-red-800';
+    if (s === 'INVESTIGATING') return 'bg-orange-100 text-orange-800';
+    if (s === 'FALSE_POSITIVE') return 'bg-gray-100 text-gray-800';
     return 'bg-green-100 text-green-800';
   };
 
@@ -129,7 +129,7 @@ export function AmlAlertsPage() {
             ))}
           </div>
           <div className="flex gap-2">
-            {['', 'OPEN', 'DISMISSED', 'ESCALATED', 'BLOCKED'].map((s) => (
+            {['', 'OPEN', 'INVESTIGATING', 'RESOLVED', 'FALSE_POSITIVE'].map((s) => (
               <Button
                 key={s}
                 variant={statusFilter === s ? 'primary' : 'ghost'}
@@ -163,14 +163,14 @@ export function AmlAlertsPage() {
               <tbody>
                 {alerts.map((alert) => (
                   <tr key={alert.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-2 text-gray-900">{alert.userName}</td>
+                    <td className="py-3 px-2 text-gray-900">{alert.userName || alert.userId}</td>
                     <td className="py-3 px-2 text-gray-600">{alert.type}</td>
                     <td className="py-3 px-2">
                       <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${severityColor(alert.severity)}`}>
                         {alert.severity}
                       </span>
                     </td>
-                    <td className="py-3 px-2 text-gray-900">MMK {alert.amount.toLocaleString()}</td>
+                    <td className="py-3 px-2 text-gray-900">{alert.amount ? `MMK ${alert.amount.toLocaleString()}` : '—'}</td>
                     <td className="py-3 px-2">
                       <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusColor(alert.status)}`}>
                         {alert.status}
@@ -183,11 +183,11 @@ export function AmlAlertsPage() {
                           <Button variant="ghost" size="sm" onClick={() => openAction(alert, 'DISMISS')}>
                             Dismiss
                           </Button>
-                          <Button variant="secondary" size="sm" onClick={() => openAction(alert, 'ESCALATE')}>
-                            Escalate
+                          <Button variant="secondary" size="sm" onClick={() => openAction(alert, 'INVESTIGATE')}>
+                            Investigate
                           </Button>
-                          <Button variant="danger" size="sm" onClick={() => openAction(alert, 'BLOCK')}>
-                            Block User
+                          <Button variant="danger" size="sm" onClick={() => openAction(alert, 'RESOLVE')}>
+                            Resolve
                           </Button>
                         </div>
                       )}
@@ -215,7 +215,7 @@ export function AmlAlertsPage() {
           <div className="space-y-4">
             <div>
               <p className="text-sm text-gray-500">{t.common.name}</p>
-              <p className="font-medium">{selectedAlert.userName}</p>
+              <p className="font-medium">{selectedAlert.userName || selectedAlert.userId}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">{t.common.type}</p>
@@ -223,7 +223,7 @@ export function AmlAlertsPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">{t.common.amount}</p>
-              <p className="font-medium">MMK {selectedAlert.amount.toLocaleString()}</p>
+              <p className="font-medium">{selectedAlert.amount ? `MMK ${selectedAlert.amount.toLocaleString()}` : '—'}</p>
             </div>
             <Input
               label="Reason"

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '../../i18n';
-import { staffApi } from '../../services/api';
+import { merchantApi, staffApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { Card } from '../../components/cards/Card';
 import { Button } from '../../components/ui/Button';
@@ -32,12 +32,13 @@ export function StaffManagementPage() {
   const [addLimit, setAddLimit] = useState<number>(500000);
   const [newRole, setNewRole] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [merchantId, setMerchantId] = useState<string | null>(null);
 
   const loadStaff = async () => {
-    if (!user) return;
+    if (!merchantId) return;
     setLoading(true);
     try {
-      const data = await staffApi.getStaff(user.id);
+      const data = await staffApi.getStaff(merchantId);
       setStaff(data);
     } catch (err) {
       console.error(err);
@@ -47,14 +48,27 @@ export function StaffManagementPage() {
   };
 
   useEffect(() => {
-    loadStaff();
+    if (!user) return;
+    merchantApi
+      .getProfile(user.id)
+      .then((profile) => setMerchantId(profile.id))
+      .catch((err) => {
+        console.error(err);
+        setLoading(false);
+      });
   }, [user]);
 
+  useEffect(() => {
+    if (merchantId) {
+      loadStaff();
+    }
+  }, [merchantId]);
+
   const handleAdd = async () => {
-    if (!user || !addUserId) return;
+    if (!merchantId || !user || !addUserId) return;
     setSubmitting(true);
     try {
-      await staffApi.addStaff(user.id, {
+      await staffApi.addStaff(merchantId, user.id, {
         userId: addUserId,
         role: addRole,
         dailyLimit: addLimit,
@@ -72,10 +86,10 @@ export function StaffManagementPage() {
   };
 
   const handleRemove = async () => {
-    if (!user || !showRemove) return;
+    if (!merchantId || !showRemove) return;
     setSubmitting(true);
     try {
-      await staffApi.removeStaff(user.id, showRemove);
+      await staffApi.removeStaff(merchantId, showRemove);
       setShowRemove(null);
       await loadStaff();
     } catch (err) {
@@ -86,10 +100,10 @@ export function StaffManagementPage() {
   };
 
   const handleRoleChange = async () => {
-    if (!user || !showRoleChange || !newRole) return;
+    if (!merchantId || !showRoleChange || !newRole) return;
     setSubmitting(true);
     try {
-      await staffApi.changeRole(user.id, showRoleChange.id, newRole);
+      await staffApi.changeRole(merchantId, showRoleChange.id, newRole);
       setShowRoleChange(null);
       setNewRole('');
       await loadStaff();

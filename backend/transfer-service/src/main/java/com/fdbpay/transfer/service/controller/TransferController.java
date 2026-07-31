@@ -30,8 +30,9 @@ public class TransferController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<TransactionResponse> initiateTransfer(
+            @RequestParam UUID userId,
             @Valid @RequestBody TransferRequest request) {
-        return ApiResponse.success(transferService.initiateTransfer(request));
+        return ApiResponse.success(transferService.initiateTransfer(userId, request));
     }
 
     @GetMapping("/{id}")

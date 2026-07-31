@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public interface StaffService {
 
-    StaffAccountResponse addStaff(UUID merchantId, AddStaffRequest request);
+    StaffAccountResponse addStaff(UUID merchantId, UUID userId, AddStaffRequest request);
 
     void removeStaff(UUID staffId, UUID merchantId);
 

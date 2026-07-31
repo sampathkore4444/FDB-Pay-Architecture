@@ -30,19 +30,12 @@ public class StaffServiceImpl implements StaffService {
 
     @Override
     @Transactional
-    public StaffAccountResponse addStaff(UUID merchantId, AddStaffRequest request) {
+    public StaffAccountResponse addStaff(UUID merchantId, UUID userId, AddStaffRequest request) {
         Merchant merchant = merchantRepository.findById(merchantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Merchant", merchantId.toString()));
 
-        boolean hasOwner = staffAccountRepository.findByMerchantIdAndStatus(merchantId, StaffAccountStatus.ACTIVE)
-                .stream()
-                .anyMatch(s -> s.getRole() == StaffRole.OWNER && s.getUserId().equals(request.getUserId()));
-
-        if (!hasOwner) {
-            boolean userIsMerchantOwner = merchant.getUserId().equals(request.getUserId());
-            if (!userIsMerchantOwner) {
-                throw new BusinessException(ErrorCodes.UNAUTHORIZED, "Only the merchant owner can add staff");
-            }
+        if (!merchant.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCodes.UNAUTHORIZED, "Only the merchant owner can add staff");
         }
 
         staffAccountRepository.findByMerchantIdAndUserId(merchantId, request.getUserId())

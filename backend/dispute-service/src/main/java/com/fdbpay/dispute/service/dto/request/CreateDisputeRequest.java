@@ -15,7 +15,7 @@ import java.util.UUID;
 @Builder
 public class CreateDisputeRequest {
 
-    @NotBlank(message = "transactionId is required")
+    @NotNull(message = "transactionId is required")
     private UUID transactionId;
 
     @NotNull(message = "dispute type is required")

@@ -13,7 +13,7 @@ interface KycSubmission {
   userName: string;
   userPhone: string;
   documentType: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'VERIFIED' | 'REJECTED';
   submittedAt: string;
   documentUrl?: string;
 }
@@ -27,7 +27,7 @@ export function KycReviewPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedKyc, setSelectedKyc] = useState<KycSubmission | null>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
-  const [reviewAction, setReviewAction] = useState<'APPROVED' | 'REJECTED'>('APPROVED');
+  const [reviewAction, setReviewAction] = useState<'VERIFIED' | 'REJECTED'>('VERIFIED');
   const [reviewReason, setReviewReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -36,10 +36,9 @@ export function KycReviewPage() {
   const fetchSubmissions = async () => {
     setLoading(true);
     try {
-      const data = await adminApi.getKycPending(page, 20);
+      const data = await adminApi.getKycPending(page, 20, statusFilter === 'ALL' ? undefined : statusFilter);
       const list = (data as unknown as { requests: KycSubmission[] })?.requests || [];
-      const filtered = statusFilter === 'ALL' ? list : list.filter((k) => k.status === statusFilter);
-      setSubmissions(filtered);
+      setSubmissions(list);
       setTotalPages(Math.max(1, Math.ceil(list.length / 20)));
     } catch {
       toast.error(t.common.error);
@@ -52,7 +51,7 @@ export function KycReviewPage() {
     fetchSubmissions();
   }, [page, statusFilter]);
 
-  const openReview = (kyc: KycSubmission, action: 'APPROVED' | 'REJECTED') => {
+  const openReview = (kyc: KycSubmission, action: 'VERIFIED' | 'REJECTED') => {
     setSelectedKyc(kyc);
     setReviewAction(action);
     setReviewReason('');
@@ -67,7 +66,7 @@ export function KycReviewPage() {
         status: reviewAction,
         reason: reviewReason || undefined,
       });
-      toast.success(reviewAction === 'APPROVED' ? t.common.approved : t.common.rejected);
+      toast.success(reviewAction === 'VERIFIED' ? t.common.approved : t.common.rejected);
       setReviewModalOpen(false);
       fetchSubmissions();
     } catch {
@@ -79,7 +78,7 @@ export function KycReviewPage() {
 
   const statusColor = (s: string) => {
     if (s === 'PENDING') return 'bg-yellow-100 text-yellow-800';
-    if (s === 'APPROVED') return 'bg-green-100 text-green-800';
+    if (s === 'VERIFIED') return 'bg-green-100 text-green-800';
     return 'bg-red-100 text-red-800';
   };
 
@@ -105,7 +104,7 @@ export function KycReviewPage() {
       <Card>
         <div className="flex items-center gap-4 mb-4">
           <div className="flex gap-2">
-            {['PENDING', 'APPROVED', 'REJECTED', 'ALL'].map((s) => (
+            {['PENDING', 'VERIFIED', 'REJECTED', 'ALL'].map((s) => (
               <Button
                 key={s}
                 variant={statusFilter === s ? 'primary' : 'secondary'}
@@ -150,7 +149,7 @@ export function KycReviewPage() {
                     <td className="py-3 px-2 text-right">
                       {kyc.status === 'PENDING' && (
                         <div className="flex gap-2 justify-end">
-                          <Button variant="primary" size="sm" onClick={() => openReview(kyc, 'APPROVED')}>
+                          <Button variant="primary" size="sm" onClick={() => openReview(kyc, 'VERIFIED')}>
                             {t.common.approved}
                           </Button>
                           <Button variant="danger" size="sm" onClick={() => openReview(kyc, 'REJECTED')}>
@@ -177,7 +176,7 @@ export function KycReviewPage() {
         </div>
       </Card>
 
-      <Modal open={reviewModalOpen} onClose={() => setReviewModalOpen(false)} title={reviewAction === 'APPROVED' ? t.common.approved : t.common.rejected}>
+      <Modal open={reviewModalOpen} onClose={() => setReviewModalOpen(false)} title={reviewAction === 'VERIFIED' ? t.common.approved : t.common.rejected}>
         {selectedKyc && (
           <div className="space-y-4">
             <div>
@@ -200,7 +199,7 @@ export function KycReviewPage() {
               <Button variant="ghost" onClick={() => setReviewModalOpen(false)}>
                 {t.common.cancel}
               </Button>
-              <Button variant={reviewAction === 'APPROVED' ? 'primary' : 'danger'} onClick={submitReview} loading={submitting}>
+              <Button variant={reviewAction === 'VERIFIED' ? 'primary' : 'danger'} onClick={submitReview} loading={submitting}>
                 {t.common.confirm}
               </Button>
             </div>

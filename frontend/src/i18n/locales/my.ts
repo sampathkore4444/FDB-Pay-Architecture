@@ -46,6 +46,7 @@ const my: Translations = {
     failed: 'မအောင်မြင်ပါ',
     cancelled: 'ပယ်ဖျက်ပြီး',
     approved: 'အတည်ပြုပြီး',
+    verified: 'အတည်ပြုပြီး',
     rejected: 'ငြင်းပယ်ပြီး',
     resolved: 'ဖြေရှင်းပြီး',
     open: 'ဖွင့်ထားသည်',
@@ -554,6 +555,8 @@ const my: Translations = {
     status: {
       OPEN: 'ဖွင့်ထားသည်',
       IN_PROGRESS: 'ဆောင်ရွက်နေသည်',
+      WAITING_CUSTOMER: 'ဖောက်သည် စောင့်ဆိုင်းနေသည်',
+      WAITING_INTERNAL: 'အတွင်းရေးရာ စောင့်ဆိုင်းနေသည်',
       RESOLVED: 'ဖြေရှင်းပြီး',
       ESCALATED: 'တင်မြှင့်ပြီး',
       CLOSED: 'ပိတ်ပြီး',

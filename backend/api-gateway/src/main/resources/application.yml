@@ -80,6 +80,30 @@ spring:
             - Path=/v1/audit/**
           filters:
             - StripPrefix=1
+        - id: admin-kyc
+          uri: lb://kyc-service
+          predicates:
+            - Path=/v1/admin/kyc/**
+          filters:
+            - StripPrefix=1
+        - id: admin-aml
+          uri: lb://fraud-risk-service
+          predicates:
+            - Path=/v1/admin/aml/**
+          filters:
+            - StripPrefix=1
+        - id: admin-users
+          uri: lb://auth-service
+          predicates:
+            - Path=/v1/admin/users/**
+          filters:
+            - StripPrefix=1
+        - id: admin-merchants
+          uri: lb://merchant-service
+          predicates:
+            - Path=/v1/admin/merchants/**
+          filters:
+            - StripPrefix=1
         - id: reporting-service
           uri: lb://reporting-service
           predicates:
@@ -145,7 +169,7 @@ spring:
           predicates:
             - Path=/v1/invoices/**
           filters:
-            - RewritePath=/v1/invoices/(?<segment>.*), /merchant/invoices/${segment}
+            - RewritePath=/v1/invoices(?<segment>.*), /merchant/invoices${segment}
         - id: transfer-service-schedule
           uri: lb://transfer-service
           predicates:

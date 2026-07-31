@@ -229,7 +229,7 @@ export function DisputesPage() {
               <option value="UNAUTHORIZED">{t.dispute.disputeTypes.unauthorized}</option>
               <option value="DUPLICATE">{t.dispute.disputeTypes.duplicate}</option>
               <option value="NOT_RECEIVED">{t.dispute.disputeTypes.notReceived}</option>
-              <option value="INCORRECT">{t.dispute.disputeTypes.incorrect}</option>
+              <option value="OVERCHARGE">{t.dispute.disputeTypes.incorrect}</option>
               <option value="OTHER">{t.dispute.disputeTypes.other}</option>
             </select>
           </div>

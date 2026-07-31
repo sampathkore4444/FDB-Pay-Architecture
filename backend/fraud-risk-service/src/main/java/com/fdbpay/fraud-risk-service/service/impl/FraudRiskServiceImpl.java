@@ -3,6 +3,7 @@ package com.fdbpay.fraud.risk.service.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fdbpay.fraud.risk.service.dto.request.SanctionScreeningRequest;
 import com.fdbpay.fraud.risk.service.dto.request.TransactionEvaluationRequest;
+import com.fdbpay.fraud.risk.service.dto.response.AdminAmlAlertResponse;
 import com.fdbpay.fraud.risk.service.dto.response.FraudAlertResponse;
 import com.fdbpay.fraud.risk.service.dto.response.FraudEvaluationResponse;
 import com.fdbpay.fraud.risk.service.model.FraudAlert;
@@ -145,6 +146,50 @@ public class FraudRiskServiceImpl implements FraudRiskService {
         return mapToResponse(saved);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<AdminAmlAlertResponse> getAmlAlerts(AlertSeverity severity, AlertStatus status, int page, int size) {
+        List<FraudAlert> alerts = fraudAlertRepository.findAll().stream()
+                .filter(a -> severity == null || a.getSeverity() == severity)
+                .filter(a -> status == null || a.getStatus() == status)
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .toList();
+
+        return alerts.stream()
+                .skip((long) page * size)
+                .limit(size)
+                .map(this::mapToAdminAmlResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public AdminAmlAlertResponse actionAlert(UUID alertId, String action, String reason) {
+        FraudAlert alert = fraudAlertRepository.findById(alertId)
+                .orElseThrow(() -> new ResourceNotFoundException("FraudAlert", alertId.toString()));
+
+        AlertStatus newStatus;
+        switch (action.toUpperCase()) {
+            case "DISMISS" -> newStatus = AlertStatus.FALSE_POSITIVE;
+            case "INVESTIGATE" -> newStatus = AlertStatus.INVESTIGATING;
+            case "RESOLVE" -> newStatus = AlertStatus.RESOLVED;
+            default -> throw new BusinessException("INVALID_ACTION", "Unsupported alert action: " + action);
+        }
+
+        alert.setStatus(newStatus);
+        if (newStatus == AlertStatus.RESOLVED || newStatus == AlertStatus.FALSE_POSITIVE) {
+            alert.setResolvedAt(OffsetDateTime.now());
+        }
+        if (reason != null && !reason.isBlank()) {
+            String existing = alert.getDetails();
+            alert.setDetails(existing != null && !existing.isBlank() ? existing + " | " + reason : reason);
+        }
+
+        FraudAlert saved = fraudAlertRepository.save(alert);
+        log.info("Alert {} action {} applied, status={}", alertId, action, newStatus);
+        return mapToAdminAmlResponse(saved);
+    }
+
     private void createFraudAlert(TransactionEvaluationRequest request, int riskScore, List<String> reasons) {
         AlertSeverity severity;
         if (riskScore >= 90) {
@@ -202,6 +247,18 @@ public class FraudRiskServiceImpl implements FraudRiskService {
                 .details(alert.getDetails())
                 .createdAt(alert.getCreatedAt())
                 .resolvedAt(alert.getResolvedAt())
+                .build();
+    }
+
+    private AdminAmlAlertResponse mapToAdminAmlResponse(FraudAlert alert) {
+        return AdminAmlAlertResponse.builder()
+                .id(alert.getId())
+                .userId(alert.getUserId())
+                .type(alert.getAlertType().name())
+                .severity(alert.getSeverity().name())
+                .status(alert.getStatus().name())
+                .description(alert.getDetails())
+                .createdAt(alert.getCreatedAt())
                 .build();
     }
 }

@@ -104,6 +104,7 @@ export function LoginPage() {
             <Input
               label="PIN"
               type="password"
+              autoComplete="current-password"
               placeholder={isRegister ? 'Create a PIN (4-6 digits)' : 'Enter your PIN'}
               error={errors.pin?.message}
               {...registerField('pin')}

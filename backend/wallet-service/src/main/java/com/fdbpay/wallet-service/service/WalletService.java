@@ -27,4 +27,6 @@ public interface WalletService {
     void debitWallet(UUID walletId, Long amount, String description, UUID txnId);
 
     void creditWallet(UUID walletId, Long amount, String description, UUID txnId);
+
+    UUID getWalletOwner(UUID walletId);
 }

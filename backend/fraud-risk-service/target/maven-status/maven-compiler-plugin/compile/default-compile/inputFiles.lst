@@ -1,0 +1,17 @@
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/FraudRiskServiceApplication.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/consumer/FraudEventConsumer.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/controller/AdminAmlController.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/controller/FraudRiskController.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/dto/request/AmlActionRequest.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/dto/request/SanctionScreeningRequest.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/dto/request/TransactionEvaluationRequest.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/dto/response/AdminAmlAlertResponse.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/dto/response/FraudAlertResponse.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/dto/response/FraudEvaluationResponse.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/model/FraudAlert.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/model/enums/AlertSeverity.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/model/enums/AlertStatus.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/model/enums/AlertType.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/repository/FraudAlertRepository.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/service/FraudRiskService.java
+/opt/FDB_PAY/backend/fraud-risk-service/src/main/java/com/fdbpay/fraud-risk-service/service/impl/FraudRiskServiceImpl.java

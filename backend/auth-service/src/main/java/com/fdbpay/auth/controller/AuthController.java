@@ -73,4 +73,10 @@ public class AuthController {
         UserProfileResponse profile = authService.getProfile(phone);
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
+
+    @GetMapping("/user/by-phone")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> getUserByPhone(@RequestParam String phone) {
+        UserProfileResponse profile = authService.getProfile(phone);
+        return ResponseEntity.ok(ApiResponse.success(profile));
+    }
 }

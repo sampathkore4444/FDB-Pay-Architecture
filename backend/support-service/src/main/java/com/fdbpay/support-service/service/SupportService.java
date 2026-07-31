@@ -16,6 +16,8 @@ public interface SupportService {
 
     SupportTicketResponse getTicket(UUID ticketId);
 
+    List<TicketMessageResponse> getTicketMessages(UUID ticketId);
+
     TicketMessageResponse addMessage(UUID ticketId, UUID userId, AddMessageRequest request);
 
     Page<SupportTicketResponse> getAllTickets(int page, int size);

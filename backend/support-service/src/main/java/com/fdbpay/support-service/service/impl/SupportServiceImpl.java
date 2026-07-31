@@ -94,6 +94,13 @@ public class SupportServiceImpl implements SupportService {
     }
 
     @Override
+    public List<TicketMessageResponse> getTicketMessages(UUID ticketId) {
+        return messageRepository.findByTicketIdOrderByCreatedAtAsc(ticketId).stream()
+                .map(this::mapMessageToResponse)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public TicketMessageResponse addMessage(UUID ticketId, UUID userId, AddMessageRequest request) {
         SupportTicket ticket = ticketRepository.findById(ticketId)

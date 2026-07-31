@@ -3,6 +3,7 @@ package com.fdbpay.kyc.service.service.impl;
 import com.fdbpay.kyc.service.dto.request.DocumentRequest;
 import com.fdbpay.kyc.service.dto.request.KycReviewRequest;
 import com.fdbpay.kyc.service.dto.request.KycSubmitRequest;
+import com.fdbpay.kyc.service.dto.response.AdminKycRequestResponse;
 import com.fdbpay.kyc.service.dto.response.KycStatusResponse;
 import com.fdbpay.kyc.service.model.KycAudit;
 import com.fdbpay.kyc.service.model.KycDocument;
@@ -91,31 +92,7 @@ public class KycServiceImpl implements KycService {
         KycDocument kycDocument = kycDocumentRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("KYC Document", userId.toString()));
 
-        String newStatus = request.getStatus().toUpperCase();
-        if (!STATUS_VERIFIED.equals(newStatus) && !STATUS_REJECTED.equals(newStatus)) {
-            throw new BusinessException("INVALID_STATUS", "Status must be either VERIFIED or REJECTED");
-        }
-
-        kycDocument.setStatus(newStatus);
-        kycDocument.setReviewedAt(OffsetDateTime.now());
-
-        for (DocumentEntry entry : kycDocument.getDocuments()) {
-            entry.setVerified(STATUS_VERIFIED.equals(newStatus));
-            entry.setVerifiedBy(UUID.fromString(reviewedBy));
-            if (STATUS_REJECTED.equals(newStatus) && request.getNotes() != null) {
-                entry.setRejectionReason(request.getNotes());
-            }
-        }
-
-        KycDocument saved = kycDocumentRepository.save(kycDocument);
-
-        String action = STATUS_VERIFIED.equals(newStatus) ? "KYC_VERIFIED" : "KYC_REJECTED";
-        saveAuditLog(userId, action, reviewedBy, request.getNotes());
-
-        publishKycEvent("kyc.reviewed", userId, newStatus, kycDocument.getTier());
-
-        log.info("KYC {} for user {} by {}", newStatus, userId, reviewedBy);
-        return mapToResponse(saved);
+        return applyReview(kycDocument, request.getStatus(), request.getNotes(), reviewedBy);
     }
 
     @Override
@@ -139,6 +116,79 @@ public class KycServiceImpl implements KycService {
                 .toList();
 
         return new org.springframework.data.domain.PageImpl<>(content, pageRequest, pendingDocs.size());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AdminKycRequestResponse> getAdminRequests(String status, int page, int size) {
+        List<KycDocument> docs = kycDocumentRepository.findAll().stream()
+                .filter(d -> status == null || status.isBlank() || "ALL".equalsIgnoreCase(status)
+                        || status.equalsIgnoreCase(d.getStatus()))
+                .sorted((a, b) -> b.getSubmittedAt().compareTo(a.getSubmittedAt()))
+                .toList();
+
+        return docs.stream()
+                .skip((long) page * size)
+                .limit(size)
+                .map(this::mapToAdminResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public KycStatusResponse reviewRequest(String documentId, String status, String notes, UUID reviewedBy) {
+        KycDocument kycDocument = kycDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("KYC Document", documentId));
+        return applyReview(kycDocument, status, notes, reviewedBy != null ? reviewedBy.toString() : null);
+    }
+
+    private KycStatusResponse applyReview(KycDocument kycDocument, String newStatus, String notes, String reviewedBy) {
+        String normalized = newStatus.toUpperCase();
+        if (!STATUS_VERIFIED.equals(normalized) && !STATUS_REJECTED.equals(normalized)) {
+            throw new BusinessException("INVALID_STATUS", "Status must be either VERIFIED or REJECTED");
+        }
+
+        kycDocument.setStatus(normalized);
+        kycDocument.setReviewedAt(OffsetDateTime.now());
+
+        for (DocumentEntry entry : kycDocument.getDocuments()) {
+            entry.setVerified(STATUS_VERIFIED.equals(normalized));
+            if (reviewedBy != null) {
+                entry.setVerifiedBy(UUID.fromString(reviewedBy));
+            }
+            if (STATUS_REJECTED.equals(normalized) && notes != null) {
+                entry.setRejectionReason(notes);
+            }
+        }
+
+        KycDocument saved = kycDocumentRepository.save(kycDocument);
+
+        String action = STATUS_VERIFIED.equals(normalized) ? "KYC_VERIFIED" : "KYC_REJECTED";
+        saveAuditLog(kycDocument.getUserId(), action, reviewedBy, notes);
+        publishKycEvent("kyc.reviewed", kycDocument.getUserId(), normalized, kycDocument.getTier());
+
+        log.info("KYC {} for user {} by {}", normalized, kycDocument.getUserId(), reviewedBy);
+        return mapToResponse(saved);
+    }
+
+    private AdminKycRequestResponse mapToAdminResponse(KycDocument doc) {
+        String documentType = null;
+        String documentUrl = null;
+        if (doc.getDocuments() != null && !doc.getDocuments().isEmpty()) {
+            DocumentEntry first = doc.getDocuments().get(0);
+            documentType = first.getType();
+            documentUrl = first.getFileUrl();
+        }
+        return AdminKycRequestResponse.builder()
+                .id(doc.getId())
+                .userId(doc.getUserId())
+                .userName("")
+                .userPhone("")
+                .documentType(documentType != null ? documentType : doc.getTier())
+                .status(doc.getStatus())
+                .submittedAt(doc.getSubmittedAt())
+                .documentUrl(documentUrl)
+                .build();
     }
 
     private void saveAuditLog(UUID userId, String action, String reviewedBy, String notes) {

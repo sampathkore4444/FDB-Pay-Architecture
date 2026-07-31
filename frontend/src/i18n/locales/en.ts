@@ -44,6 +44,7 @@ const en = {
     failed: 'Failed',
     cancelled: 'Cancelled',
     approved: 'Approved',
+    verified: 'Verified',
     rejected: 'Rejected',
     resolved: 'Resolved',
     open: 'Open',
@@ -552,6 +553,8 @@ const en = {
     status: {
       OPEN: 'Open',
       IN_PROGRESS: 'In Progress',
+      WAITING_CUSTOMER: 'Waiting Customer',
+      WAITING_INTERNAL: 'Waiting Internal',
       RESOLVED: 'Resolved',
       ESCALATED: 'Escalated',
       CLOSED: 'Closed',

@@ -19,6 +19,9 @@ public interface AuditService {
 
     Page<AuditEntryResponse> getActionAuditLog(String action, int page, int size);
 
+    Page<AuditEntryResponse> searchAuditLog(String actorId, String action, String resourceType, String resourceId,
+                                            LocalDate startDate, LocalDate endDate, int page, int size);
+
     AuditSummaryResponse getSummary(LocalDate startDate, LocalDate endDate);
 
     String exportAuditLog(LocalDate startDate, LocalDate endDate, String format);
