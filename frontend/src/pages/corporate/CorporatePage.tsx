@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { useAuthStore } from '../../store/authStore';
 import { corporateApi } from '../../services/api';
 import { Card } from '../../components/cards/Card';
@@ -46,11 +47,11 @@ export function CorporatePage() {
         createdAt: new Date().toISOString(),
       };
       setDisbursements([newEntry, ...disbursements]);
-      alert(`Bulk disbursement initiated. Batch ID: ${result.batchId}`);
+      toast.success(`Bulk disbursement initiated. Batch ID: ${result.batchId}`);
       setDescription('');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Upload failed';
-      alert(msg);
+      toast.error(msg);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -64,7 +65,7 @@ export function CorporatePage() {
       setReconResult(result);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch reconciliation';
-      alert(msg);
+      toast.error(msg);
     }
   };
 

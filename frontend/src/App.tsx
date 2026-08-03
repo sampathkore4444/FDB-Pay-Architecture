@@ -62,7 +62,7 @@ function App() {
             <Route path="/directory" element={<RoleGuard allowedRoles={CONSUMER}><MerchantDirectoryPage /></RoleGuard>} />
 
             {/* Merchant pages */}
-            <Route path="/merchant" element={<RoleGuard allowedRoles={MERCHANT}><MerchantPage /></RoleGuard>} />
+            <Route path="/merchant" element={<RoleGuard allowedRoles={CONSUMER_MERCHANT}><MerchantPage /></RoleGuard>} />
             <Route path="/invoices" element={<RoleGuard allowedRoles={MERCHANT}><InvoicesPage /></RoleGuard>} />
             <Route path="/inventory" element={<RoleGuard allowedRoles={MERCHANT}><InventoryPage /></RoleGuard>} />
             <Route path="/staff" element={<RoleGuard allowedRoles={MERCHANT}><StaffManagementPage /></RoleGuard>} />

@@ -13,6 +13,7 @@ const icons: Record<string, string> = {
   bills: '📄',
   airtime: '📱',
   merchant: '🏪',
+  becomeMerchant: '🏪',
   invoices: '🧾',
   inventory: '📦',
   agent: '🤝',
@@ -55,6 +56,7 @@ const navItems: NavItem[] = [
   { key: 'directory', route: '/directory', roles: ['CONSUMER'] },
 
   { key: 'merchant', route: '/merchant', roles: ['MERCHANT'] },
+  { key: 'becomeMerchant', route: '/merchant', roles: ['CONSUMER'] },
   { key: 'invoices', route: '/invoices', roles: ['MERCHANT'] },
   { key: 'inventory', route: '/inventory', roles: ['MERCHANT'] },
   { key: 'staff', route: '/staff', roles: ['MERCHANT'] },

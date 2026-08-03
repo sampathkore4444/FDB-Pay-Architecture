@@ -4,6 +4,7 @@ import com.fdbpay.auth.dto.request.*;
 import com.fdbpay.auth.dto.response.AdminUserResponse;
 import com.fdbpay.auth.dto.response.AuthResponse;
 import com.fdbpay.auth.dto.response.UserProfileResponse;
+import com.fdbpay.auth.model.enums.UserRole;
 import com.fdbpay.auth.model.enums.UserStatus;
 
 import java.util.List;
@@ -32,4 +33,6 @@ public interface AuthService {
     List<AdminUserResponse> getUsers(String search, UserStatus status, int page, int size);
 
     void updateUserStatus(UUID userId, UserStatus status, String reason);
+
+    void updateUserRole(UUID userId, UserRole role);
 }

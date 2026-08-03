@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import { useTranslation } from '../../i18n';
-import { directoryApi } from '../../services/api';
+import { directoryApi, merchantApi } from '../../services/api';
 import { Card } from '../../components/cards/Card';
 import { Input } from '../../components/ui/Input';
 
@@ -31,6 +32,8 @@ export function MerchantDirectoryPage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [selectedMerchant, setSelectedMerchant] = useState<MerchantResult | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const loadMerchants = async () => {
@@ -63,6 +66,23 @@ export function MerchantDirectoryPage() {
   useEffect(() => {
     loadMerchants();
   }, [category, coords]);
+
+  const handleSelectMerchant = async (m: MerchantResult) => {
+    setSelectedMerchant(m);
+    setQrDataUrl(null);
+    setQrLoading(true);
+    try {
+      const qr = await merchantApi.generateQr(m.id);
+      if (qr.qrData) {
+        const dataUrl = await QRCode.toDataURL(qr.qrData, { width: 192, margin: 1 });
+        setQrDataUrl(dataUrl);
+      }
+    } catch (err) {
+      console.error('Failed to load merchant QR', err);
+    } finally {
+      setQrLoading(false);
+    }
+  };
 
   const handleSearch = () => {
     loadMerchants();
@@ -109,7 +129,7 @@ export function MerchantDirectoryPage() {
             <div
               key={m.id}
               className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => setSelectedMerchant(m)}
+              onClick={() => handleSelectMerchant(m)}
             >
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
@@ -160,10 +180,16 @@ export function MerchantDirectoryPage() {
                 <p><span className="font-medium">{t.directory.rating}:</span> ★ {selectedMerchant.rating.toFixed(1)}</p>
               )}
             </div>
-            {selectedMerchant.qrStaticUrl && (
+            {(qrDataUrl || qrLoading) && (
               <div className="mt-4 text-center">
-                <img src={selectedMerchant.qrStaticUrl} alt="QR" className="w-48 h-48 mx-auto rounded-lg" />
-                <p className="text-xs text-gray-400 mt-2">Scan to pay</p>
+                {qrLoading ? (
+                  <p className="text-xs text-gray-400 py-8">{t.common.loading}</p>
+                ) : (
+                  <>
+                    <img src={qrDataUrl || ''} alt="QR" className="w-48 h-48 mx-auto rounded-lg" />
+                    <p className="text-xs text-gray-400 mt-2">Scan to pay</p>
+                  </>
+                )}
               </div>
             )}
           </div>

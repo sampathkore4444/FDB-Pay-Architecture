@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { useTranslation } from '../../i18n';
 import { requestMoneyApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -6,14 +7,15 @@ import { Card } from '../../components/cards/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/modals/Modal';
-import { formatDate, cn } from '../../utils';
+import { formatDate, cn, copyToClipboard, getApiErrorMessage } from '../../utils';
 import type { MoneyRequest } from '../../types';
 
 export function RequestMoneyPage() {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const [tab, setTab] = useState<'sent' | 'received'>('sent');
-  const [requests, setRequests] = useState<MoneyRequest[]>([]);
+  const [sentRequests, setSentRequests] = useState<MoneyRequest[]>([]);
+  const [receivedRequests, setReceivedRequests] = useState<MoneyRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showLink, setShowLink] = useState<MoneyRequest | null>(null);
@@ -28,8 +30,12 @@ export function RequestMoneyPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const data = await requestMoneyApi.getMyRequests(user.id);
-      setRequests(data);
+      const [sent, received] = await Promise.all([
+        requestMoneyApi.getMyRequests(user.id),
+        user.phone ? requestMoneyApi.getReceivedRequests(user.phone) : Promise.resolve([]),
+      ]);
+      setSentRequests(sent);
+      setReceivedRequests(received);
     } catch (err) {
       console.error(err);
     } finally {
@@ -57,7 +63,7 @@ export function RequestMoneyPage() {
       setShowLink(result);
       await loadRequests();
     } catch (err) {
-      console.error(err);
+      toast.error(getApiErrorMessage(err, t.requestMoney.createFailed));
     } finally {
       setSubmitting(false);
     }
@@ -68,18 +74,23 @@ export function RequestMoneyPage() {
     setSubmitting(true);
     try {
       await requestMoneyApi.respondToRequest(user.id, requestId, action);
+      toast.success(action === 'ACCEPT' ? t.requestMoney.acceptSuccess : t.requestMoney.cancelSuccess);
       await loadRequests();
     } catch (err) {
-      console.error(err);
+      toast.error(getApiErrorMessage(err, t.requestMoney.actionFailed));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleCopyLink = (link: string) => {
-    navigator.clipboard.writeText(link);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyLink = async (link: string) => {
+    try {
+      await copyToClipboard(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error(t.requestMoney.copyFailed);
+    }
   };
 
   const statusColor = (s: string) => {
@@ -92,8 +103,6 @@ export function RequestMoneyPage() {
     return m[s] || 'bg-gray-100 text-gray-800';
   };
 
-  const sentRequests = requests.filter((r) => r.requesterId === user?.id);
-  const receivedRequests = requests.filter((r) => r.targetPhone === user?.phone);
   const displayRequests = tab === 'sent' ? sentRequests : receivedRequests;
 
   return (

@@ -176,6 +176,12 @@ spring:
             - Path=/v1/scheduled/**
           filters:
             - RewritePath=/v1/scheduled/(?<segment>.*), /transfer/schedule/${segment}
+        - id: transfer-service-request-create
+          uri: lb://transfer-service
+          predicates:
+            - Path=/v1/request-money
+          filters:
+            - RewritePath=/v1/request-money, /transfer/request
         - id: transfer-service-request
           uri: lb://transfer-service
           predicates:

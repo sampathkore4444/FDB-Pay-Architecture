@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { transferApi } from '../../services/api';
@@ -7,6 +9,7 @@ import { useAuthStore } from '../../store/authStore';
 import { Card } from '../../components/cards/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { getApiErrorMessage } from '../../utils';
 
 const transferSchema = z.object({
   recipient: z.string().min(1, 'Recipient is required'),
@@ -18,8 +21,8 @@ type TransferForm = z.infer<typeof transferSchema>;
 
 export function TransferPage() {
   const user = useAuthStore((s) => s.user);
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm<TransferForm>({
     resolver: zodResolver(transferSchema),
@@ -28,17 +31,18 @@ export function TransferPage() {
   const onSubmit = async (data: TransferForm) => {
     if (!user) return;
     setLoading(true);
-    setResult(null);
     try {
       const response = await transferApi.initiate(user.id, {
         recipientIdentifier: data.recipient,
         amount: data.amount,
         description: data.description,
+        type: 'P2P',
       });
-      setResult(`Transfer completed! ID: ${response.id}`);
+      toast.success(`Transfer completed! ID: ${response.id}`);
       reset();
+      navigate('/wallet');
     } catch (err) {
-      setResult(`Error: ${err instanceof Error ? err.message : 'Transfer failed'}`);
+      toast.error(getApiErrorMessage(err, 'Transfer failed'));
     } finally {
       setLoading(false);
     }
@@ -70,12 +74,6 @@ export function TransferPage() {
             placeholder="What's this for?"
             {...register('description')}
           />
-
-          {result && (
-            <p className={`text-sm ${result.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>
-              {result}
-            </p>
-          )}
 
           <Button type="submit" loading={loading} className="w-full">
             Send Money

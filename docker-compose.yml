@@ -194,6 +194,7 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       EUREKA_URL: http://eureka-server:8761/eureka/
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      AUTH_SERVICE_BASE_URL: http://auth-service:8081
     ports:
       - "8084:8084"
     depends_on:

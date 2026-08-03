@@ -36,6 +36,7 @@ public class SecurityConfig {
                         .requestMatchers("/auth/otp/**").permitAll()
                         .requestMatchers("/auth/user/by-phone").permitAll()
                         .requestMatchers("/admin/**").permitAll()
+                        .requestMatchers("/internal/**").permitAll()
                         .requestMatchers("/actuator/**", "/swagger-ui/**", "/api-docs/**").permitAll()
                         .anyRequest().authenticated()
                 );

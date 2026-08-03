@@ -61,7 +61,7 @@ export const walletApi = {
     api.get<ApiResponse<Wallet>>(`/wallet?userId=${userId}`).then((r) => r.data.data),
 
   getLedger: (userId: string, page = 0, size = 20) =>
-    api.get<ApiResponse<{ content: Array<{ id: string; type: string; amount: number; description: string; createdAt: string }> }>>(`/wallet/ledger?userId=${userId}&page=${page}&size=${size}`).then((r) => ({
+    api.get<ApiResponse<{ content: Array<{ id: string; type: string; amount: number; description: string; txnId: string; createdAt: string }> }>>(`/wallet/ledger?userId=${userId}&page=${page}&size=${size}`).then((r) => ({
       entries: (r.data.data?.content || []).map((e) => ({
         id: e.id,
         idempotencyKey: '',
@@ -71,6 +71,7 @@ export const walletApi = {
         fee: 0,
         currency: 'MMK',
         description: e.description,
+        referenceId: e.txnId,
         createdAt: e.createdAt,
       })),
     })),
@@ -79,7 +80,7 @@ export const walletApi = {
     api.post<ApiResponse<Wallet>>(`/wallet/topup?userId=${userId}`, { amount, channel, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
 
   withdraw: (userId: string, amount: number) =>
-    api.post<ApiResponse<Wallet>>(`/wallet/withdraw?userId=${userId}&amount=${amount}&idempotencyKey=idem_${Date.now()}`).then((r) => r.data.data),
+    api.post<ApiResponse<Wallet>>(`/wallet/withdraw?userId=${userId}`, { amount, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
 };
 
 export const transferApi = {
@@ -386,6 +387,14 @@ export const requestMoneyApi = {
 
   getMyRequests: (userId: string) =>
     api.get<ApiResponse<{ content: Array<Omit<MoneyRequest, 'requesterId'> & { requesterUserId: string }> }>>(`/request-money/my?userId=${userId}`).then((r) =>
+      (r.data.data?.content || []).map((rq) => ({
+        ...rq,
+        requesterId: rq.requesterUserId,
+      })),
+    ),
+
+  getReceivedRequests: (phone: string) =>
+    api.get<ApiResponse<{ content: Array<Omit<MoneyRequest, 'requesterId'> & { requesterUserId: string }> }>>(`/request-money/phone/${encodeURIComponent(phone)}`).then((r) =>
       (r.data.data?.content || []).map((rq) => ({
         ...rq,
         requesterId: rq.requesterUserId,

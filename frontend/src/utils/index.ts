@@ -32,3 +32,31 @@ export function truncate(str: string, length: number): string {
   if (str.length <= length) return str;
   return str.slice(0, length) + '...';
 }
+
+export function getApiErrorMessage(err: unknown, fallback: string): string {
+  const anyErr = err as { response?: { data?: { error?: { message?: string } } }; message?: string };
+  return anyErr.response?.data?.error?.message || anyErr.message || fallback;
+}
+
+export function copyToClipboard(text: string): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      const ok = document.execCommand('copy');
+      if (!ok) throw new Error('Copy command failed');
+      resolve();
+    } catch (err) {
+      reject(err);
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  });
+}

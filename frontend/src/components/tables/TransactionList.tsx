@@ -1,4 +1,6 @@
-import { formatCurrency, formatDate, cn } from '../../utils';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { formatCurrency, formatDate, cn, copyToClipboard } from '../../utils';
 import type { Transaction } from '../../types';
 
 interface TransactionListProps {
@@ -13,6 +15,31 @@ const statusColors: Record<string, string> = {
   REVERSED: 'bg-orange-100 text-orange-800',
   CANCELLED: 'bg-gray-100 text-gray-800',
 };
+
+function TxnId({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await copyToClipboard(id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error('Copy failed');
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Copy transaction ID"
+      className="text-xs font-mono text-gray-400 hover:text-blue-600 hover:underline"
+    >
+      {copied ? 'Copied!' : `ID: ${id.slice(0, 8)}…`}
+    </button>
+  );
+}
 
 export function TransactionList({ transactions, loading }: TransactionListProps) {
   if (loading) {
@@ -50,6 +77,7 @@ export function TransactionList({ transactions, loading }: TransactionListProps)
             <div>
               <p className="text-sm font-medium text-gray-900">{txn.description || txn.type}</p>
               <p className="text-xs text-gray-500">{formatDate(txn.createdAt)}</p>
+              {txn.referenceId && <TxnId id={txn.referenceId} />}
             </div>
           </div>
           <div className="text-right">

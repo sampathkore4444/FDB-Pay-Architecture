@@ -4,6 +4,7 @@ import com.fdbpay.shared.constants.ErrorCodes;
 import com.fdbpay.shared.event.NotificationEvent;
 import com.fdbpay.shared.exceptions.BusinessException;
 import com.fdbpay.shared.exceptions.ResourceNotFoundException;
+import com.fdbpay.merchant.service.client.AuthServiceClient;
 import com.fdbpay.merchant.service.dto.request.MerchantRegisterRequest;
 import com.fdbpay.merchant.service.dto.response.MerchantResponse;
 import com.fdbpay.merchant.service.dto.response.QrCodeResponse;
@@ -16,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -29,12 +31,18 @@ public class MerchantServiceImpl implements MerchantService {
 
     private final MerchantRepository merchantRepository;
     private final KafkaTemplate<String, NotificationEvent> kafkaTemplate;
+    private final AuthServiceClient authServiceClient;
 
     @Override
     @Transactional
     public MerchantResponse register(UUID userId, MerchantRegisterRequest request) {
-        if (merchantRepository.existsByBusinessLicenseOrTaxId(
-                request.getBusinessLicense(), request.getTaxId())) {
+        String businessLicense = request.getBusinessLicense();
+        String taxId = request.getTaxId();
+        boolean licenseConflict = StringUtils.hasText(businessLicense)
+                && merchantRepository.existsByBusinessLicense(businessLicense);
+        boolean taxConflict = StringUtils.hasText(taxId)
+                && merchantRepository.existsByTaxId(taxId);
+        if (licenseConflict || taxConflict) {
             throw new BusinessException(ErrorCodes.VALIDATION_ERROR,
                     "A merchant with this business license or tax ID already exists");
         }
@@ -195,9 +203,13 @@ public class MerchantServiceImpl implements MerchantService {
     public MerchantResponse updateStatus(UUID merchantId, MerchantStatus status, String reason) {
         Merchant merchant = merchantRepository.findById(merchantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Merchant", merchantId.toString()));
+        MerchantStatus previousStatus = merchant.getStatus();
         merchant.setStatus(status);
         merchant.setUpdatedAt(OffsetDateTime.now());
         merchant = merchantRepository.save(merchant);
+        if (status == MerchantStatus.ACTIVE && previousStatus != MerchantStatus.ACTIVE) {
+            authServiceClient.upgradeUserRole(merchant.getUserId(), "MERCHANT");
+        }
         log.info("Merchant {} status updated to {} reason={}", merchantId, status, reason);
         return mapToResponse(merchant);
     }

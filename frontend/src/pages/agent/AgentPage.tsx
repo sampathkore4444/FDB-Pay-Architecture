@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { useAuthStore } from '../../store/authStore';
 import { agentApi } from '../../services/api';
 import { Card } from '../../components/cards/Card';
@@ -44,7 +45,7 @@ export function AgentPage() {
     setProcessing('in');
     try {
       await agentApi.cashIn(user.id, { customerPhone: cashInPhone, amount: Number(cashInAmount) });
-      alert('Cash-in successful');
+      toast.success('Cash-in successful');
       setCashInPhone('');
       setCashInAmount('');
       const [acct, hist] = await Promise.all([
@@ -55,7 +56,7 @@ export function AgentPage() {
       setHistory(hist);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Cash-in failed';
-      alert(msg);
+      toast.error(msg);
     } finally {
       setProcessing(null);
     }
@@ -66,7 +67,7 @@ export function AgentPage() {
     setProcessing('out');
     try {
       await agentApi.cashOut(user.id, { customerPhone: cashOutPhone, amount: Number(cashOutAmount) });
-      alert('Cash-out successful');
+      toast.success('Cash-out successful');
       setCashOutPhone('');
       setCashOutAmount('');
       const [acct, hist] = await Promise.all([
@@ -77,7 +78,7 @@ export function AgentPage() {
       setHistory(hist);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Cash-out failed';
-      alert(msg);
+      toast.error(msg);
     } finally {
       setProcessing(null);
     }

@@ -24,6 +24,10 @@ public interface MerchantRepository extends JpaRepository<Merchant, UUID> {
 
     boolean existsByBusinessLicenseOrTaxId(String businessLicense, String taxId);
 
+    boolean existsByBusinessLicense(String businessLicense);
+
+    boolean existsByTaxId(String taxId);
+
     boolean existsByUserIdAndBusinessName(UUID userId, String businessName);
 
     Page<Merchant> findByStatusOrderByCreatedAtDesc(MerchantStatus status, Pageable pageable);

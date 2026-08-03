@@ -156,11 +156,11 @@ export function UserManagementPage() {
                           <Button variant="danger" size="sm" onClick={() => openAction(user, 'SUSPENDED')}>
                             Suspend
                           </Button>
-                        ) : user.status === 'SUSPENDED' ? (
+                        ) : (
                           <Button variant="primary" size="sm" onClick={() => openAction(user, 'ACTIVE')}>
                             Activate
                           </Button>
-                        ) : null}
+                        )}
                       </div>
                     </td>
                   </tr>

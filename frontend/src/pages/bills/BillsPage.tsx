@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { billApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { Card } from '../../components/cards/Card';
@@ -34,9 +35,9 @@ export function BillsPage() {
         accountNumber,
         amount: 10000,
       });
-      alert('Bill payment successful!');
+      toast.success('Bill payment successful!');
     } catch (err) {
-      alert('Payment failed');
+      toast.error('Payment failed');
     } finally {
       setLoading(false);
     }

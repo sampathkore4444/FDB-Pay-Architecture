@@ -34,6 +34,7 @@ export interface Transaction {
   fee: number;
   currency: string;
   description?: string;
+  referenceId?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
   completedAt?: string;

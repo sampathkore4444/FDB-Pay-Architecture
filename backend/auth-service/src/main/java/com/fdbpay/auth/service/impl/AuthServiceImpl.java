@@ -5,6 +5,7 @@ import com.fdbpay.auth.dto.response.AdminUserResponse;
 import com.fdbpay.auth.dto.response.AuthResponse;
 import com.fdbpay.auth.dto.response.UserProfileResponse;
 import com.fdbpay.auth.model.User;
+import com.fdbpay.auth.model.enums.UserRole;
 import com.fdbpay.auth.model.enums.UserStatus;
 import com.fdbpay.auth.repository.UserRepository;
 import com.fdbpay.auth.service.AuthService;
@@ -324,5 +325,15 @@ public class AuthServiceImpl implements AuthService {
         user.setStatus(status);
         userRepository.save(user);
         log.info("User {} status updated to {} reason={}", userId, status, reason);
+    }
+
+    @Override
+    @Transactional
+    public void updateUserRole(UUID userId, UserRole role) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.USER_NOT_FOUND, "User not found with id: " + userId));
+        user.setRole(role);
+        userRepository.save(user);
+        log.info("User {} role updated to {}", userId, role);
     }
 }
