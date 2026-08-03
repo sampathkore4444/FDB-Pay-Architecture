@@ -41,9 +41,10 @@ export function PayrollPage() {
   const [payDate, setPayDate] = useState('');
 
   const loadRuns = async () => {
+    if (!user) return;
     setLoading(true);
     try {
-      const data = await payrollApi.getPayrollRun();
+      const data = await payrollApi.getPayrollRun(user.id);
       setRuns(data);
     } catch (err) {
       console.error(err);
@@ -54,7 +55,7 @@ export function PayrollPage() {
 
   useEffect(() => {
     loadRuns();
-  }, []);
+  }, [user]);
 
   const handleAddEmployee = () => {
     if (!empName || !empPhone || !empSalary) return;
@@ -72,8 +73,16 @@ export function PayrollPage() {
     if (!user || employees.length === 0 || !payDate) return;
     setSubmitting(true);
     try {
-      await payrollApi.createPayrollRun(user.id, { employees, payDate });
-      await payrollApi.submitPayroll(user.id);
+      const created = await payrollApi.createPayrollRun(user.id, {
+        period: payDate,
+        employees: employees.map((e) => ({
+          employeeId: e.phone,
+          employeeName: e.name,
+          phone: e.phone,
+          amount: e.salary,
+        })),
+      });
+      await payrollApi.submitPayroll(user.id, created.id);
       setShowCreate(false);
       setEmployees([]);
       setPayDate('');
@@ -95,25 +104,16 @@ export function PayrollPage() {
     }
   };
 
-  const handleReject = async (id: string) => {
-    if (!user) return;
-    try {
-      await payrollApi.rejectPayroll(user.id, id);
-      await loadRuns();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const totalAmount = employees.reduce((s, e) => s + e.salary, 0);
 
   const statusColor = (s: string) => {
     const m: Record<string, string> = {
       DRAFT: 'bg-gray-100 text-gray-800',
-      PENDING_APPROVAL: 'bg-yellow-100 text-yellow-800',
+      SUBMITTED: 'bg-yellow-100 text-yellow-800',
       APPROVED: 'bg-green-100 text-green-800',
-      REJECTED: 'bg-red-100 text-red-800',
-      PROCESSED: 'bg-blue-100 text-blue-800',
+      PROCESSING: 'bg-blue-100 text-blue-800',
+      COMPLETED: 'bg-green-100 text-green-800',
+      FAILED: 'bg-red-100 text-red-800',
     };
     return m[s] || 'bg-gray-100 text-gray-800';
   };
@@ -153,11 +153,8 @@ export function PayrollPage() {
                   <p className="text-xs text-gray-400">{formatDate(run.createdAt)}</p>
                 </div>
                 <div className="flex space-x-1" onClick={(e) => e.stopPropagation()}>
-                  {run.status === 'PENDING_APPROVAL' && (
-                    <>
-                      <Button size="sm" onClick={() => handleApprove(run.id)}>{t.payroll.approve}</Button>
-                      <Button size="sm" variant="danger" onClick={() => handleReject(run.id)}>{t.payroll.reject}</Button>
-                    </>
+                  {run.status === 'SUBMITTED' && (
+                    <Button size="sm" onClick={() => handleApprove(run.id)}>{t.payroll.approve}</Button>
                   )}
                 </div>
               </div>

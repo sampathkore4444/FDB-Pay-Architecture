@@ -43,14 +43,13 @@ public class PayrollServiceImpl implements PayrollService {
                 .sum();
 
         PayrollRun payrollRun = PayrollRun.builder()
-                .id(UUID.randomUUID())
                 .corporateUserId(corporateUserId)
                 .period(request.getPeriod())
                 .totalEmployees(request.getEmployees().size())
                 .totalAmount(totalAmount)
                 .status("DRAFT")
                 .build();
-        payrollRunRepository.save(payrollRun);
+        payrollRunRepository.saveAndFlush(payrollRun);
 
         for (CreatePayrollRunRequest.PayrollEmployeeItem item : request.getEmployees()) {
             PayrollEmployee employee = PayrollEmployee.builder()

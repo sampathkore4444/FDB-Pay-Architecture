@@ -31,6 +31,7 @@ export function MerchantDirectoryPage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [selectedMerchant, setSelectedMerchant] = useState<MerchantResult | null>(null);
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const loadMerchants = async () => {
     setLoading(true);
@@ -39,7 +40,7 @@ export function MerchantDirectoryPage() {
       if (search) {
         data = await directoryApi.searchMerchants(search, category || undefined);
       } else {
-        data = await directoryApi.getNearbyMerchants(category || undefined);
+        data = await directoryApi.getNearbyMerchants(category || undefined, coords || undefined);
       }
       setMerchants(data);
     } catch (err) {
@@ -50,8 +51,18 @@ export function MerchantDirectoryPage() {
   };
 
   useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+        () => setCoords(null),
+        { timeout: 5000 }
+      );
+    }
+  }, []);
+
+  useEffect(() => {
     loadMerchants();
-  }, [category]);
+  }, [category, coords]);
 
   const handleSearch = () => {
     loadMerchants();

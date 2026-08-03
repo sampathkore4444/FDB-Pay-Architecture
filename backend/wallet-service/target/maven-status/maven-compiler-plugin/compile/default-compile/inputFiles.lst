@@ -6,6 +6,7 @@
 /opt/FDB_PAY/backend/wallet-service/src/main/java/com/fdbpay/wallet-service/dto/request/CreateWalletRequest.java
 /opt/FDB_PAY/backend/wallet-service/src/main/java/com/fdbpay/wallet-service/dto/request/DepositToPocketRequest.java
 /opt/FDB_PAY/backend/wallet-service/src/main/java/com/fdbpay/wallet-service/dto/request/TopUpRequest.java
+/opt/FDB_PAY/backend/wallet-service/src/main/java/com/fdbpay/wallet-service/dto/request/WalletDebitCreditRequest.java
 /opt/FDB_PAY/backend/wallet-service/src/main/java/com/fdbpay/wallet-service/dto/request/WithdrawFromPocketRequest.java
 /opt/FDB_PAY/backend/wallet-service/src/main/java/com/fdbpay/wallet-service/dto/request/WithdrawRequest.java
 /opt/FDB_PAY/backend/wallet-service/src/main/java/com/fdbpay/wallet-service/dto/response/LedgerEntryResponse.java

@@ -88,7 +88,7 @@ public class MoneyRequestServiceImpl implements MoneyRequestService {
                     .description(moneyRequest.getDescription() != null ? moneyRequest.getDescription() : "Money request payment")
                     .build();
 
-            var txnResponse = transferService.initiateTransfer(transferRequest);
+            var txnResponse = transferService.initiateTransfer(targetUserId, transferRequest);
 
             moneyRequest.setStatus(MoneyRequestStatus.ACCEPTED);
             moneyRequest.setPaymentId(txnResponse.getId());

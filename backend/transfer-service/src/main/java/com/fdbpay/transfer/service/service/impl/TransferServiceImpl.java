@@ -21,6 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
@@ -69,7 +72,7 @@ public class TransferServiceImpl implements TransferService {
             transaction.setStatus(TransactionStatus.FAILED);
             transaction.setFailureReason(e.getMessage());
             transactionRepository.save(transaction);
-            publishEvent(transaction, "FAILED", senderUserId, receiver.userId());
+            publishEvent(transaction, "FAILED", userId, receiver.userId());
             throw new BusinessException(ErrorCodes.INTERNAL_ERROR, "Transfer processing failed: " + e.getMessage());
         }
 
@@ -98,7 +101,7 @@ public class TransferServiceImpl implements TransferService {
         transaction.setCompletedAt(OffsetDateTime.now());
         transaction = transactionRepository.save(transaction);
 
-        publishEvent(transaction, "COMPLETED");
+        publishEvent(transaction, "COMPLETED", null, null);
         log.info("Transfer confirmed: transactionId={}", transactionId);
 
         return mapToResponse(transaction);
@@ -119,7 +122,7 @@ public class TransferServiceImpl implements TransferService {
         transaction.setFailureReason("Cancelled by user");
         transaction = transactionRepository.save(transaction);
 
-        publishEvent(transaction, "CANCELLED");
+        publishEvent(transaction, "CANCELLED", null, null);
         log.info("Transfer cancelled: transactionId={}", transactionId);
 
         return mapToResponse(transaction);
@@ -196,22 +199,23 @@ public class TransferServiceImpl implements TransferService {
     }
 
     private UUID getWalletOwnerUserId(UUID walletId) {
-        Map<?, ?> response = webClientBuilder.build()
-                .get()
-                .uri(uriBuilder -> uriBuilder.scheme("http").host("wallet-service")
-                        .path("/wallet/owner").queryParam("walletId", walletId).build())
-                .retrieve()
-                .bodyToMono(Map.class)
-                .block();
+        try {
+            Map<?, ?> response = webClientBuilder.build()
+                    .get()
+                    .uri(uriBuilder -> uriBuilder.scheme("http").host("wallet-service")
+                            .path("/wallet/owner").queryParam("walletId", walletId).build())
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
 
-        if (response == null) {
-            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient wallet could not be resolved");
+            if (response == null) {
+                return null;
+            }
+            Object userId = response.get("data");
+            return userId != null ? UUID.fromString(userId.toString()) : null;
+        } catch (Exception e) {
+            return null;
         }
-        Object userId = response.get("data");
-        if (userId == null) {
-            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient wallet could not be resolved");
-        }
-        return UUID.fromString(userId.toString());
     }
 
     private Receiver resolveReceiver(String recipientIdentifier) {
@@ -219,37 +223,46 @@ public class TransferServiceImpl implements TransferService {
             throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient identifier is required");
         }
 
-        UUID walletId;
-        UUID userId;
+        UUID identifierUuid;
         try {
-            walletId = UUID.fromString(recipientIdentifier);
-            userId = getWalletOwnerUserId(walletId);
-        } catch (IllegalArgumentException notAWalletId) {
-            Map<?, ?> authResponse;
-            try {
-                authResponse = webClientBuilder.build()
-                        .get()
-                        .uri(uriBuilder -> uriBuilder.scheme("http").host("auth-service")
-                                .path("/auth/user/by-phone").queryParam("phone", recipientIdentifier).build())
-                        .retrieve()
-                        .bodyToMono(Map.class)
-                        .block();
-            } catch (Exception e) {
-                throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient not found: " + recipientIdentifier);
-            }
-
-            if (authResponse == null) {
-                throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient not found: " + recipientIdentifier);
-            }
-            Object data = authResponse.get("data");
-            Object receiverUserId = data != null ? ((Map<?, ?>) data).get("id") : null;
-            if (receiverUserId == null) {
-                throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient not found: " + recipientIdentifier);
-            }
-            userId = UUID.fromString(receiverUserId.toString());
-            walletId = getWalletIdByUserId(userId);
+            identifierUuid = UUID.fromString(recipientIdentifier);
+        } catch (IllegalArgumentException e) {
+            return resolveReceiverByPhone(recipientIdentifier);
         }
-        return new Receiver(walletId, userId);
+
+        UUID ownerUserId = getWalletOwnerUserId(identifierUuid);
+        if (ownerUserId != null) {
+            return new Receiver(identifierUuid, ownerUserId);
+        }
+
+        UUID walletId = getWalletIdByUserId(identifierUuid);
+        return new Receiver(walletId, identifierUuid);
+    }
+
+    private Receiver resolveReceiverByPhone(String phone) {
+        Map<?, ?> authResponse;
+        try {
+            String encodedPhone = URLEncoder.encode(phone, StandardCharsets.UTF_8);
+            authResponse = webClientBuilder.build()
+                    .get()
+                    .uri(URI.create("http://auth-service/auth/user/by-phone?phone=" + encodedPhone))
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient not found: " + phone);
+        }
+
+        if (authResponse == null) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient not found: " + phone);
+        }
+        Object data = authResponse.get("data");
+        Object receiverUserId = data != null ? ((Map<?, ?>) data).get("id") : null;
+        if (receiverUserId == null) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Recipient not found: " + phone);
+        }
+        UUID userId = UUID.fromString(receiverUserId.toString());
+        return new Receiver(getWalletIdByUserId(userId), userId);
     }
 
     private record Receiver(UUID walletId, UUID userId) {

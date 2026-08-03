@@ -163,7 +163,7 @@ public class ScheduledPaymentServiceImpl implements ScheduledPaymentService {
                 .description(schedule.getDescription() != null ? schedule.getDescription() : "Scheduled payment")
                 .build();
 
-        transferService.initiateTransfer(transferRequest);
+        transferService.initiateTransfer(schedule.getUserId(), transferRequest);
 
         schedule.setCompletedExecutions(schedule.getCompletedExecutions() + 1);
         schedule.setLastExecutionDate(LocalDate.now());

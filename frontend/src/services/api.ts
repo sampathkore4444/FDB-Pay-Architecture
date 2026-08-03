@@ -285,20 +285,63 @@ export const staffApi = {
     api.put<ApiResponse<void>>(`/staff/${staffId}/role?merchantId=${ownerId}&role=${newRole.toUpperCase()}`).then((r) => r.data.data),
 };
 
-export const directoryApi = {
-  searchMerchants: (query: string, category?: string) =>
-    api.get<ApiResponse<{ id: string; businessName: string; category: string; distance?: number; rating?: number; address?: string; qrStaticUrl?: string }[]>>(`/directory/search?query=${query}${category ? `&category=${category}` : ''}`).then((r) => r.data.data || []),
+interface DirectoryEntry {
+  id: string;
+  businessName: string;
+  category: string;
+  distance?: number;
+  rating?: number;
+  address?: string;
+  qrStaticUrl?: string;
+}
 
-  getNearbyMerchants: (category?: string) =>
-    api.get<ApiResponse<{ id: string; businessName: string; category: string; distance?: number; rating?: number; address?: string; qrStaticUrl?: string }[]>>(`/directory/nearby${category ? `?category=${category}` : ''}`).then((r) => r.data.data || []),
+export const directoryApi = {
+  searchMerchants: (query: string, category?: string) => {
+    const params = new URLSearchParams();
+    if (query) params.set('query', query);
+    if (category) params.set('category', category);
+    const qs = params.toString();
+    return api.get<ApiResponse<{ content: DirectoryEntry[] }>>(`/directory/search${qs ? `?${qs}` : ''}`).then((r) => r.data.data?.content || []);
+  },
+
+  getNearbyMerchants: (category?: string, coords?: { latitude: number; longitude: number }, radius = 5.0) => {
+    const params = new URLSearchParams();
+    if (coords) {
+      params.set('latitude', String(coords.latitude));
+      params.set('longitude', String(coords.longitude));
+      params.set('radius', String(radius));
+    }
+    if (category) params.set('category', category);
+    const qs = params.toString();
+    return api.get<ApiResponse<{ content: DirectoryEntry[] }>>(`/directory/nearby${qs ? `?${qs}` : ''}`).then((r) => r.data.data?.content || []);
+  },
 };
 
 export const scheduledPaymentApi = {
   create: (userId: string, data: { recipient: string; amount: number; frequency: string; startDate: string; description?: string }) =>
-    api.post<ApiResponse<{ id: string }>>(`/scheduled?userId=${userId}`, { ...data, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
+    api.post<ApiResponse<{ id: string }>>(`/scheduled?userId=${userId}`, {
+      recipientIdentifier: data.recipient,
+      amount: data.amount,
+      type: 'P2P',
+      frequency: data.frequency.toUpperCase(),
+      description: data.description,
+      idempotencyKey: `idem_${Date.now()}`,
+    }).then((r) => r.data.data),
 
   getMySchedules: (userId: string) =>
-    api.get<ApiResponse<{ id: string; recipient: string; amount: number; frequency: string; status: string; startDate: string; nextExecution: string; description?: string; createdAt: string }[]>>(`/scheduled/my?userId=${userId}`).then((r) => r.data.data || []),
+    api.get<ApiResponse<{ content: Array<{ id: string; recipientIdentifier: string; amount: number; frequency: string; status: string; nextExecutionDate: string | null; lastExecutionDate: string | null; description?: string; createdAt: string }> }>>(`/scheduled/my?userId=${userId}`).then((r) =>
+      (r.data.data?.content || []).map((s) => ({
+        id: s.id,
+        recipient: s.recipientIdentifier,
+        amount: s.amount,
+        frequency: (s.frequency || '').toLowerCase(),
+        status: s.status,
+        startDate: s.createdAt,
+        nextExecution: s.nextExecutionDate || s.createdAt,
+        description: s.description,
+        createdAt: s.createdAt,
+      })),
+    ),
 
   pause: (userId: string, scheduleId: string) =>
     api.put<ApiResponse<void>>(`/scheduled/${scheduleId}/pause?userId=${userId}`).then((r) => r.data.data),
@@ -311,28 +354,43 @@ export const scheduledPaymentApi = {
 };
 
 export const payrollApi = {
-  createPayrollRun: (userId: string, data: { employees: { name: string; phone: string; salary: number }[]; payDate: string }) =>
-    api.post<ApiResponse<{ id: string }>>(`/payroll/run?userId=${userId}`, { ...data, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
+  createPayrollRun: (userId: string, data: { period: string; employees: { employeeId: string; employeeName: string; phone: string; amount: number }[] }) =>
+    api.post<ApiResponse<{ id: string; status: string }>>(`/payroll/create`, data, { headers: { 'X-User-Id': userId } }).then((r) => r.data.data),
 
-  submitPayroll: (userId: string) =>
-    api.post<ApiResponse<void>>(`/payroll/submit?userId=${userId}`).then((r) => r.data.data),
+  submitPayroll: (userId: string, runId: string) =>
+    api.post<ApiResponse<{ id: string; status: string }>>(`/payroll/${runId}/submit`, null, { headers: { 'X-User-Id': userId } }).then((r) => r.data.data),
 
   approvePayroll: (userId: string, runId: string) =>
-    api.post<ApiResponse<void>>(`/payroll/approve?userId=${userId}&runId=${runId}`).then((r) => r.data.data),
+    api.put<ApiResponse<{ id: string; status: string }>>(`/payroll/${runId}/approve`, null, { headers: { 'X-User-Id': userId } }).then((r) => r.data.data),
 
-  rejectPayroll: (userId: string, runId: string) =>
-    api.post<ApiResponse<void>>(`/payroll/reject?userId=${userId}&runId=${runId}`).then((r) => r.data.data),
-
-  getPayrollRun: (runId?: string) =>
-    api.get<ApiResponse<{ id: string; status: string; totalAmount: number; employeeCount: number; payDate: string; createdAt: string; rejectionReason?: string; employees?: { name: string; phone: string; salary: number }[] }[]>>(`/payroll/runs${runId ? `/${runId}` : ''}`).then((r) => r.data.data || []),
+  getPayrollRun: (userId: string) =>
+    api.get<ApiResponse<Array<{ id: string; status: string; totalAmount: number; totalEmployees: number; period: string; createdAt: string; employees?: { employeeName: string; phone: string; amount: number }[] }>>>(`/payroll/history`, { headers: { 'X-User-Id': userId } }).then((r) =>
+      (r.data.data || []).map((run) => ({
+        id: run.id,
+        status: run.status,
+        totalAmount: run.totalAmount ?? 0,
+        employeeCount: run.totalEmployees ?? 0,
+        payDate: run.period || run.createdAt,
+        createdAt: run.createdAt,
+        employees: run.employees?.map((e) => ({ name: e.employeeName, phone: e.phone, salary: e.amount })),
+      })),
+    ),
 };
 
 export const requestMoneyApi = {
   createRequest: (userId: string, data: { targetPhone: string; amount: number; description?: string }) =>
-    api.post<ApiResponse<MoneyRequest>>(`/request-money?userId=${userId}`, { ...data, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
+    api.post<ApiResponse<Omit<MoneyRequest, 'requesterId'> & { requesterUserId: string }>>(`/request-money?userId=${userId}`, { ...data, idempotencyKey: `idem_${Date.now()}` }).then((r) => ({
+      ...r.data.data,
+      requesterId: r.data.data.requesterUserId,
+    })),
 
   getMyRequests: (userId: string) =>
-    api.get<ApiResponse<MoneyRequest[]>>(`/request-money/my?userId=${userId}`).then((r) => r.data.data || []),
+    api.get<ApiResponse<{ content: Array<Omit<MoneyRequest, 'requesterId'> & { requesterUserId: string }> }>>(`/request-money/my?userId=${userId}`).then((r) =>
+      (r.data.data?.content || []).map((rq) => ({
+        ...rq,
+        requesterId: rq.requesterUserId,
+      })),
+    ),
 
   respondToRequest: (userId: string, requestId: string, action: 'ACCEPT' | 'CANCEL') =>
     api.put<ApiResponse<void>>(`/request-money/${requestId}/respond?targetUserId=${userId}`, { action }).then((r) => r.data.data),
@@ -421,7 +479,7 @@ export const agentApi = {
     api.post<ApiResponse<{ id: string; status: string }>>(`/agent/cash-out`, { ...data, idempotencyKey: `idem_${Date.now()}` }, { headers: { 'X-User-Id': userId } }).then((r) => r.data.data),
 
   getFloatHistory: (userId: string, page = 0, size = 20) =>
-    api.get<ApiResponse<{ entries: { id: string; type: string; amount: number; description: string; createdAt: string }[] }>>(`/agent/float-history?page=${page}&size=${size}`, { headers: { 'X-User-Id': userId } }).then((r) => r.data.data?.entries || []),
+    api.get<ApiResponse<Array<{ id: string; type: string; amount: number; description: string; createdAt: string }>>>(`/agent/float-history?page=${page}&size=${size}`, { headers: { 'X-User-Id': userId } }).then((r) => r.data.data || []),
 };
 
 export const corporateApi = {

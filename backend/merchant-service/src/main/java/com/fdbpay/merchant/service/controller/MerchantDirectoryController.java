@@ -36,11 +36,15 @@ public class MerchantDirectoryController {
 
     @GetMapping("/nearby")
     public ApiResponse<Page<MerchantDirectoryEntry>> getNearbyMerchants(
-            @RequestParam Double latitude,
-            @RequestParam Double longitude,
+            @RequestParam(required = false) Double latitude,
+            @RequestParam(required = false) Double longitude,
             @RequestParam(defaultValue = "5.0") Double radius,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        if (latitude == null || longitude == null) {
+            return ApiResponse.success(merchantDirectoryService.search(
+                    null, null, null, null, null, page, size));
+        }
         return ApiResponse.success(merchantDirectoryService.getNearbyMerchants(
                 latitude, longitude, radius, page, size));
     }
