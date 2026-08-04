@@ -3,6 +3,9 @@ import type {
   ApiResponse, AuthResponse, User, Wallet, Transaction, Merchant, Biller, BillLookup,
   MoneyRequest, Invoice, InvoiceItem, RemittanceCorridor, Remittance,
   Promotion, CashbackWallet, SupportTicket, TicketMessage, SupportStats,
+  ReferenceType, ReferenceTypeSummary, ReferenceValue, ReferenceDataLookup,
+  PromotionStatus, PromotionValidation, PromotionUsage,
+  MerchantAnalyticsSummary, MerchantAnalyticsBenchmark, AnalyticsTransactionRow,
 } from '../types';
 import { useAuthStore } from '../store/authStore';
 
@@ -157,6 +160,35 @@ export const adminApi = {
     api.put<ApiResponse<void>>(`/admin/merchants/${merchantId}/status`, data).then((r) => r.data.data),
 };
 
+export const refDataApi = {
+  getTypes: (page = 0, size = 50) =>
+    api.get<ApiResponse<{ content: ReferenceTypeSummary[]; totalElements: number }>>(`/refdata/types?page=${page}&size=${size}`).then((r) => r.data.data),
+
+  getType: (id: string) =>
+    api.get<ApiResponse<ReferenceType>>(`/refdata/types/${id}`).then((r) => r.data.data),
+
+  createType: (data: { code: string; description: string; active?: boolean }) =>
+    api.post<ApiResponse<ReferenceType>>('/refdata/types', data).then((r) => r.data.data),
+
+  updateType: (id: string, data: { description: string; active: boolean }) =>
+    api.put<ApiResponse<ReferenceType>>(`/refdata/types/${id}`, data).then((r) => r.data.data),
+
+  deleteType: (id: string) =>
+    api.delete<ApiResponse<void>>(`/refdata/types/${id}`).then((r) => r.data.data),
+
+  addValue: (typeId: string, data: { value: string; code: string; sortOrder?: number; active?: boolean }) =>
+    api.post<ApiResponse<ReferenceValue>>(`/refdata/types/${typeId}/values`, data).then((r) => r.data.data),
+
+  updateValue: (id: string, data: { value: string; code: string; sortOrder: number; active: boolean }) =>
+    api.put<ApiResponse<ReferenceValue>>(`/refdata/values/${id}`, data).then((r) => r.data.data),
+
+  deleteValue: (id: string) =>
+    api.delete<ApiResponse<void>>(`/refdata/values/${id}`).then((r) => r.data.data),
+
+  getLookup: (code: string) =>
+    api.get<ApiResponse<ReferenceDataLookup>>(`/refdata/type/${code}`).then((r) => r.data.data),
+};
+
 export const airtimeApi = {
   topup: (userId: string, data: { provider: string; phone: string; amount: number }) =>
     api.post<ApiResponse<{ id: string }>>(`/airtime/topup?userId=${userId}`, { ...data, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
@@ -176,13 +208,13 @@ export const savingsApi = {
     api.get<ApiResponse<{ id: string; name: string; currentAmount: number; goalAmount: number; targetDate: string; interestEarned: number; status: string; createdAt: string }[]>>(`/savings/pockets?userId=${userId}`).then((r) => r.data.data || []),
 
   deposit: (userId: string, data: { pocketId: string; amount: number }) =>
-    api.post<ApiResponse<void>>(`/savings/deposit?userId=${userId}`, { ...data, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
+    api.post<ApiResponse<void>>(`/savings/pockets/${data.pocketId}/deposit?userId=${userId}`, { amount: data.amount, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
 
   withdraw: (userId: string, data: { pocketId: string; amount: number }) =>
-    api.post<ApiResponse<void>>(`/savings/withdraw?userId=${userId}`, { ...data, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
+    api.post<ApiResponse<void>>(`/savings/pockets/${data.pocketId}/withdraw?userId=${userId}`, { amount: data.amount, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
 
   getTransactions: (userId: string, pocketId: string) =>
-    api.get<ApiResponse<{ entries: Transaction[] }>>(`/savings/transactions?userId=${userId}&pocketId=${pocketId}`).then((r) => r.data.data?.entries || []),
+    api.get<ApiResponse<Transaction[]>>(`/savings/pockets/${pocketId}/transactions?userId=${userId}`).then((r) => r.data.data || []),
 };
 
 export const disputeApi = {
@@ -458,11 +490,11 @@ export const promotionsApi = {
   getActive: () =>
     api.get<ApiResponse<Promotion[]>>('/promotions/active').then((r) => r.data.data || []),
 
-  validateCode: (code: string) =>
-    api.get<ApiResponse<Promotion>>(`/promotions/validate?code=${code}`).then((r) => r.data.data),
+  validateCode: (userId: string, code: string, amount: number) =>
+    api.post<ApiResponse<PromotionValidation>>(`/promotions/validate?promoCode=${encodeURIComponent(code)}&amount=${amount}&userId=${userId}`).then((r) => r.data.data),
 
-  apply: (userId: string, code: string) =>
-    api.post<ApiResponse<Promotion>>(`/promotions/apply?userId=${userId}`, { code, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
+  apply: (userId: string, code: string, amount: number) =>
+    api.post<ApiResponse<PromotionUsage>>(`/promotions/apply?userId=${userId}`, { promoCode: code, transactionAmount: amount, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
 
   getCashbackWallet: (userId: string) =>
     api.get<ApiResponse<CashbackWallet | null>>(`/promotions/cashback-wallet?userId=${userId}`).then((r) => ({
@@ -475,6 +507,29 @@ export const promotionsApi = {
 
   redeemCashback: (userId: string, amount: number) =>
     api.post<ApiResponse<void>>(`/promotions/cashback-redeem?userId=${userId}`, { amount, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
+
+  getMy: (userId: string, page = 0, size = 50) =>
+    api.get<ApiResponse<{ content: Promotion[]; totalElements: number }>>(`/promotions/my?userId=${userId}&page=${page}&size=${size}`).then((r) => r.data.data),
+
+  create: (data: Partial<Promotion>) =>
+    api.post<ApiResponse<Promotion>>('/promotions', data).then((r) => r.data.data),
+
+  setStatus: (id: string, status: PromotionStatus) =>
+    api.put<ApiResponse<Promotion>>(`/promotions/${id}/status?status=${status}`).then((r) => r.data.data),
+
+  deactivate: (id: string) =>
+    api.delete<ApiResponse<void>>(`/promotions/${id}`).then((r) => r.data.data),
+};
+
+export const analyticsApi = {
+  getSummary: (walletId: string, startDate?: string, endDate?: string) =>
+    api.get<ApiResponse<MerchantAnalyticsSummary>>(`/transfer/analytics/summary?walletId=${walletId}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`).then((r) => r.data.data),
+
+  getBenchmark: (walletId: string, startDate?: string, endDate?: string) =>
+    api.get<ApiResponse<MerchantAnalyticsBenchmark>>(`/transfer/analytics/benchmark?walletId=${walletId}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`).then((r) => r.data.data),
+
+  getTransactions: (walletId: string, params: { startDate?: string; endDate?: string; direction?: string; minAmount?: number; maxAmount?: number; page?: number; size?: number }) =>
+    api.get<ApiResponse<{ content: AnalyticsTransactionRow[]; totalElements: number }>>(`/transfer/analytics/transactions?walletId=${walletId}`, { params }).then((r) => r.data.data),
 };
 
 export const agentApi = {

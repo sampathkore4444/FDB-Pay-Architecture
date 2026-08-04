@@ -21,6 +21,7 @@ COPY audit-service/pom.xml audit-service/pom.xml
 COPY remittance-service/pom.xml remittance-service/pom.xml
 COPY promotions-service/pom.xml promotions-service/pom.xml
 COPY support-service/pom.xml support-service/pom.xml
+COPY reference-data-service/pom.xml reference-data-service/pom.xml
 COPY eureka-server/pom.xml eureka-server/pom.xml
 
 RUN mvn dependency:go-offline -B || true
@@ -44,9 +45,10 @@ COPY audit-service/ audit-service/
 COPY remittance-service/ remittance-service/
 COPY promotions-service/ promotions-service/
 COPY support-service/ support-service/
+COPY reference-data-service/ reference-data-service/
 COPY eureka-server/ eureka-server/
 
-RUN mvn clean package -pl shared,api-gateway,auth-service,wallet-service,transfer-service,merchant-service,bill-payment-service,agent-service,corporate-service,notification-service,fraud-risk-service,reporting-service,kyc-service,settlement-service,dispute-service,audit-service,remittance-service,promotions-service,support-service,eureka-server -am -DskipTests -B
+RUN mvn clean package -pl shared,api-gateway,auth-service,wallet-service,transfer-service,merchant-service,bill-payment-service,agent-service,corporate-service,notification-service,fraud-risk-service,reporting-service,kyc-service,settlement-service,dispute-service,audit-service,remittance-service,promotions-service,support-service,reference-data-service,eureka-server -am -DskipTests -B
 
 FROM eclipse-temurin:21-jre-jammy
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
@@ -71,6 +73,7 @@ COPY --from=builder /build/audit-service/target/*.jar /app/audit-service.jar
 COPY --from=builder /build/remittance-service/target/*.jar /app/remittance-service.jar
 COPY --from=builder /build/promotions-service/target/*.jar /app/promotions-service.jar
 COPY --from=builder /build/support-service/target/*.jar /app/support-service.jar
+COPY --from=builder /build/reference-data-service/target/*.jar /app/reference-data-service.jar
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD curl -sf http://localhost:${SERVER_PORT:-8080}/actuator/health || exit 1

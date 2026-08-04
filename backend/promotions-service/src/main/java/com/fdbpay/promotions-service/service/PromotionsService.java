@@ -4,6 +4,7 @@ import com.fdbpay.promotions.service.dto.request.ApplyPromotionRequest;
 import com.fdbpay.promotions.service.dto.request.CreatePromotionRequest;
 import com.fdbpay.promotions.service.dto.request.RedeemCashbackRequest;
 import com.fdbpay.promotions.service.dto.response.*;
+import com.fdbpay.promotions.service.model.enums.PromotionStatus;
 import org.springframework.data.domain.Page;
 
 import java.util.List;
@@ -26,4 +27,6 @@ public interface PromotionsService {
     Page<PromotionResponse> getMyPromotions(UUID userId, int page, int size);
 
     void deactivatePromotion(UUID promotionId);
+
+    PromotionResponse updateStatus(UUID promotionId, PromotionStatus status);
 }

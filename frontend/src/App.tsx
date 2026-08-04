@@ -9,6 +9,9 @@ import { TransferPage } from './pages/transfer/TransferPage';
 import { RequestMoneyPage } from './pages/transfer/RequestMoneyPage';
 import { BillsPage } from './pages/bills/BillsPage';
 import { MerchantPage } from './pages/merchant/MerchantPage';
+import { MerchantAnalyticsPage } from './pages/merchant/MerchantAnalyticsPage';
+import { MerchantReportsPage } from './pages/merchant/MerchantReportsPage';
+import { MerchantPromotionsPage } from './pages/merchant/MerchantPromotionsPage';
 import { InvoicesPage } from './pages/merchant/InvoicesPage';
 import { InventoryPage } from './pages/merchant/InventoryPage';
 import { AgentPage } from './pages/agent/AgentPage';
@@ -17,6 +20,7 @@ import { KycReviewPage } from './pages/admin/KycReviewPage';
 import { AmlAlertsPage } from './pages/admin/AmlAlertsPage';
 import { UserManagementPage } from './pages/admin/UserManagementPage';
 import { MerchantManagementPage } from './pages/admin/MerchantManagementPage';
+import { ReferenceDataPage } from './pages/admin/ReferenceDataPage';
 import { CorporatePage } from './pages/corporate/CorporatePage';
 import { AirtimeTopupPage } from './pages/airtime/AirtimeTopupPage';
 import { SavingsPocketsPage } from './pages/savings/SavingsPocketsPage';
@@ -63,6 +67,9 @@ function App() {
 
             {/* Merchant pages */}
             <Route path="/merchant" element={<RoleGuard allowedRoles={CONSUMER_MERCHANT}><MerchantPage /></RoleGuard>} />
+            <Route path="/merchant/analytics" element={<RoleGuard allowedRoles={MERCHANT}><MerchantAnalyticsPage /></RoleGuard>} />
+            <Route path="/merchant/reports" element={<RoleGuard allowedRoles={MERCHANT}><MerchantReportsPage /></RoleGuard>} />
+            <Route path="/merchant/promotions" element={<RoleGuard allowedRoles={MERCHANT}><MerchantPromotionsPage /></RoleGuard>} />
             <Route path="/invoices" element={<RoleGuard allowedRoles={MERCHANT}><InvoicesPage /></RoleGuard>} />
             <Route path="/inventory" element={<RoleGuard allowedRoles={MERCHANT}><InventoryPage /></RoleGuard>} />
             <Route path="/staff" element={<RoleGuard allowedRoles={MERCHANT}><StaffManagementPage /></RoleGuard>} />
@@ -87,6 +94,7 @@ function App() {
             <Route path="/admin/aml" element={<RoleGuard allowedRoles={ADMIN}><AmlAlertsPage /></RoleGuard>} />
             <Route path="/admin/users" element={<RoleGuard allowedRoles={ADMIN}><UserManagementPage /></RoleGuard>} />
             <Route path="/admin/merchants" element={<RoleGuard allowedRoles={ADMIN}><MerchantManagementPage /></RoleGuard>} />
+            <Route path="/admin/refdata" element={<RoleGuard allowedRoles={ADMIN}><ReferenceDataPage /></RoleGuard>} />
             <Route path="/audit" element={<RoleGuard allowedRoles={ADMIN}><AuditLogPage /></RoleGuard>} />
           </Route>
 

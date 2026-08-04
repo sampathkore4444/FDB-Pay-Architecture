@@ -265,6 +265,26 @@ public class PromotionsServiceImpl implements PromotionsService {
         log.info("Promotion deactivated: id={}", promotionId);
     }
 
+    @Override
+    @Transactional
+    public PromotionResponse updateStatus(UUID promotionId, PromotionStatus status) {
+        Promotion promotion = promotionRepository.findById(promotionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Promotion", promotionId.toString()));
+        if (status == PromotionStatus.ACTIVE) {
+            OffsetDateTime now = OffsetDateTime.now();
+            if (now.isBefore(promotion.getStartDate())) {
+                throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Promotion start date is in the future");
+            }
+            if (now.isAfter(promotion.getEndDate())) {
+                throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Promotion has already ended");
+            }
+        }
+        promotion.setStatus(status);
+        promotionRepository.save(promotion);
+        log.info("Promotion status updated: id={}, status={}", promotionId, status);
+        return mapToResponse(promotion);
+    }
+
     private Long calculateDiscount(Promotion promotion, Long amount) {
         return switch (promotion.getType()) {
             case FIXED_DISCOUNT -> {

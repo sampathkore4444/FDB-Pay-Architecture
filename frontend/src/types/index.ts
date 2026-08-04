@@ -163,20 +163,31 @@ export interface Remittance {
   completedAt?: string;
 }
 
+export type PromotionType = 'FIXED_DISCOUNT' | 'PERCENTAGE_DISCOUNT' | 'CASHBACK' | 'BOGO' | 'COUPON_CODE';
+export type PromotionStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'EXPIRED';
+export type FundingType = 'MERCHANT' | 'BANK';
+
 export interface Promotion {
   id: string;
   title: string;
-  description: string;
-  type: 'DISCOUNT' | 'CASHBACK' | 'COUPON';
+  description?: string;
+  type: PromotionType;
+  fundingType: FundingType;
+  merchantId?: string;
   discountValue: number;
-  minAmount: number;
-  maxDiscount: number;
-  validFrom: string;
-  validTo: string;
-  usageLimit: number;
-  usedCount: number;
+  maxDiscount?: number;
+  minTransactionAmount?: number;
+  maxUsageTotal: number;
+  maxUsagePerUser: number;
+  usageCount: number;
+  remainingUses: number;
+  isActive: boolean;
+  startDate: string;
+  endDate: string;
+  status: PromotionStatus;
   promoCode?: string;
-  status: 'ACTIVE' | 'EXPIRED' | 'USED';
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CashbackWallet {
@@ -217,4 +228,106 @@ export interface SupportStats {
   totalOpen: number;
   totalResolved: number;
   avgResponseTimeHours: number;
+}
+
+export interface ReferenceValue {
+  id: string;
+  value: string;
+  code: string;
+  sortOrder: number;
+  active: boolean;
+}
+
+export interface ReferenceTypeSummary {
+  id: string;
+  code: string;
+  description: string;
+  active: boolean;
+  valueCount: number;
+  updatedAt: string;
+}
+
+export interface ReferenceType {
+  id: string;
+  code: string;
+  description: string;
+  active: boolean;
+  values: ReferenceValue[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReferenceDataLookup {
+  code: string;
+  description: string;
+  values: { value: string; code: string }[];
+}
+
+export interface PaymentMethodBreakdown {
+  method: string;
+  count: number;
+  amount: number;
+}
+
+export interface DailyPoint {
+  date: string;
+  count: number;
+  amount: number;
+}
+
+export interface TopCustomer {
+  counterpartyWalletId: string;
+  count: number;
+  amount: number;
+}
+
+export interface MerchantAnalyticsSummary {
+  totalSales: number;
+  saleCount: number;
+  avgTransactionValue: number;
+  refundCount: number;
+  refundAmount: number;
+  netSales: number;
+  paymentMethods: PaymentMethodBreakdown[];
+  dailySeries: DailyPoint[];
+  topCustomers: TopCustomer[];
+}
+
+export interface MerchantAnalyticsBenchmark {
+  merchantTotalSales: number;
+  merchantSaleCount: number;
+  merchantAvgTransactionValue: number;
+  platformTotalSales: number;
+  platformTransactionCount: number;
+  platformAvgTransactionValue: number;
+  vsAveragePercent: number | null;
+}
+
+export interface AnalyticsTransactionRow {
+  id: string;
+  direction: 'SALE' | 'REFUND';
+  type: string;
+  method: string;
+  amount: number;
+  fee: number;
+  description?: string;
+  senderWalletId: string;
+  receiverWalletId: string;
+  createdAt: string;
+}
+
+export interface PromotionValidation {
+  valid: boolean;
+  discount: number;
+  message: string;
+}
+
+export interface PromotionUsage {
+  id: string;
+  promotionId: string;
+  userId: string;
+  transactionId: string;
+  discountApplied: number;
+  cashbackAmount: number;
+  createdAt: string;
 }

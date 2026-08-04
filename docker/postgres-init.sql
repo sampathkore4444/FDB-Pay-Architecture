@@ -13,3 +13,4 @@ CREATE DATABASE fdbpay_audit;
 CREATE DATABASE fdbpay_remittance;
 CREATE DATABASE fdbpay_promotions;
 CREATE DATABASE fdbpay_support;
+CREATE DATABASE fdbpay_reference_data;

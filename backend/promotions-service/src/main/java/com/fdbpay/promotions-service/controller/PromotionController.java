@@ -5,6 +5,7 @@ import com.fdbpay.promotions.service.dto.request.ApplyPromotionRequest;
 import com.fdbpay.promotions.service.dto.request.CreatePromotionRequest;
 import com.fdbpay.promotions.service.dto.request.RedeemCashbackRequest;
 import com.fdbpay.promotions.service.dto.response.*;
+import com.fdbpay.promotions.service.model.enums.PromotionStatus;
 import com.fdbpay.promotions.service.service.PromotionsService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -74,5 +75,12 @@ public class PromotionController {
     public ApiResponse<Void> deactivatePromotion(@PathVariable UUID id) {
         promotionsService.deactivatePromotion(id);
         return ApiResponse.success(null);
+    }
+
+    @PutMapping("/{id}/status")
+    public ApiResponse<PromotionResponse> updateStatus(
+            @PathVariable UUID id,
+            @RequestParam PromotionStatus status) {
+        return ApiResponse.success(promotionsService.updateStatus(id, status));
     }
 }

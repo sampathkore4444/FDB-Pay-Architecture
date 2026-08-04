@@ -89,6 +89,9 @@ export function AdminPage() {
             <Button variant="secondary" className="w-full" onClick={() => navigate('/admin/merchants')}>
               {t.nav.adminMerchants}
             </Button>
+            <Button variant="secondary" className="w-full" onClick={() => navigate('/admin/refdata')}>
+              {t.nav.adminRefData}
+            </Button>
           </div>
         </Card>
 

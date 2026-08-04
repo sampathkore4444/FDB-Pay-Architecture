@@ -29,6 +29,10 @@ public class MerchantResponse {
     private Double latitude;
     private Double longitude;
     private String qrStaticUrl;
+    private Integer rollingReservePercent;
+    private Integer rollingReservePeriodDays;
+    private Long rollingReserveBalance;
+    private String terminalFields;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

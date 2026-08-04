@@ -1,5 +1,6 @@
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/TransferServiceApplication.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/config/WebClientConfig.java
+/opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/controller/MerchantAnalyticsController.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/controller/MoneyRequestController.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/controller/ScheduledPaymentController.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/controller/TransferController.java
@@ -10,6 +11,9 @@
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/dto/response/MoneyRequestResponse.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/dto/response/ScheduledPaymentResponse.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/dto/response/TransactionResponse.java
+/opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/dto/response/analytics/AnalyticsTransactionRow.java
+/opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/dto/response/analytics/MerchantAnalyticsBenchmark.java
+/opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/dto/response/analytics/MerchantAnalyticsSummary.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/model/MoneyRequest.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/model/ScheduledPayment.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/model/Transaction.java
@@ -21,9 +25,11 @@
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/repository/MoneyRequestRepository.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/repository/ScheduledPaymentRepository.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/repository/TransactionRepository.java
+/opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/service/MerchantAnalyticsService.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/service/MoneyRequestService.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/service/ScheduledPaymentService.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/service/TransferService.java
+/opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/service/impl/MerchantAnalyticsServiceImpl.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/service/impl/MoneyRequestServiceImpl.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/service/impl/ScheduledPaymentServiceImpl.java
 /opt/FDB_PAY/backend/transfer-service/src/main/java/com/fdbpay/transfer/service/service/impl/TransferServiceImpl.java

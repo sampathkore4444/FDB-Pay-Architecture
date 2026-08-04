@@ -204,6 +204,15 @@ export function MerchantPage() {
 
       <Card title={t.merchant.quickActions}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Button variant="secondary" className="w-full" onClick={() => window.location.href = '/merchant/analytics'}>
+            {t.nav.merchantAnalytics}
+          </Button>
+          <Button variant="secondary" className="w-full" onClick={() => window.location.href = '/merchant/reports'}>
+            {t.nav.merchantReports}
+          </Button>
+          <Button variant="secondary" className="w-full" onClick={() => window.location.href = '/merchant/promotions'}>
+            {t.nav.merchantPromotions}
+          </Button>
           <Button variant="secondary" className="w-full" onClick={() => window.location.href = '/invoices'}>
             {t.nav.invoices}
           </Button>

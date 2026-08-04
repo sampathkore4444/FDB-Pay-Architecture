@@ -5,7 +5,9 @@ import com.fdbpay.merchant.service.model.enums.SettlementType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -62,6 +64,22 @@ public class Merchant {
     private Double longitude;
 
     private String qrStaticUrl;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer rollingReservePercent = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer rollingReservePeriodDays = 7;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Long rollingReserveBalance = 0L;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private String terminalFields;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

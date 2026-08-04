@@ -576,6 +576,34 @@ services:
       retries: 10
       start_period: 60s
 
+  # ── Reference Data Service (8099) ────────────────────────────
+  reference-data-service:
+    image: fdbpay-backend:latest
+    environment:
+      SERVICE_NAME: reference-data-service
+      SERVER_PORT: "8099"
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8099:8099"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8099/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
   # ── Frontend (nginx) ─────────────────────────────────────────
   frontend:
     build:

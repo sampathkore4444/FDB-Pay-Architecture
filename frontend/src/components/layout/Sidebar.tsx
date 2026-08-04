@@ -14,6 +14,9 @@ const icons: Record<string, string> = {
   airtime: '📱',
   merchant: '🏪',
   becomeMerchant: '🏪',
+  merchantAnalytics: '📊',
+  merchantReports: '🧮',
+  merchantPromotions: '🎉',
   invoices: '🧾',
   inventory: '📦',
   agent: '🤝',
@@ -23,6 +26,7 @@ const icons: Record<string, string> = {
   adminAml: '🚨',
   adminUsers: '👤',
   adminMerchants: '🏬',
+  adminRefData: '🗂️',
   disputes: '⚖️',
   audit: '📋',
   settlements: '🏦',
@@ -57,6 +61,9 @@ const navItems: NavItem[] = [
 
   { key: 'merchant', route: '/merchant', roles: ['MERCHANT'] },
   { key: 'becomeMerchant', route: '/merchant', roles: ['CONSUMER'] },
+  { key: 'merchantAnalytics', route: '/merchant/analytics', roles: ['MERCHANT'] },
+  { key: 'merchantReports', route: '/merchant/reports', roles: ['MERCHANT'] },
+  { key: 'merchantPromotions', route: '/merchant/promotions', roles: ['MERCHANT'] },
   { key: 'invoices', route: '/invoices', roles: ['MERCHANT'] },
   { key: 'inventory', route: '/inventory', roles: ['MERCHANT'] },
   { key: 'staff', route: '/staff', roles: ['MERCHANT'] },
@@ -75,6 +82,7 @@ const navItems: NavItem[] = [
   { key: 'adminAml', route: '/admin/aml', roles: ['ADMIN'] },
   { key: 'adminUsers', route: '/admin/users', roles: ['ADMIN'] },
   { key: 'adminMerchants', route: '/admin/merchants', roles: ['ADMIN'] },
+  { key: 'adminRefData', route: '/admin/refdata', roles: ['ADMIN'] },
   { key: 'audit', route: '/audit', roles: ['ADMIN'] },
 ];
 

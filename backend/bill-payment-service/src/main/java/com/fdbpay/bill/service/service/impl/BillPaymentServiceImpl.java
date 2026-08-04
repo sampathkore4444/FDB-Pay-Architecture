@@ -1,5 +1,9 @@
 package com.fdbpay.bill.service.service.impl;
 
+import com.fdbpay.bill.service.dto.refdata.RefDataLookup;
+import com.fdbpay.bill.service.dto.refdata.RefDataType;
+import com.fdbpay.bill.service.dto.refdata.RefDataTypePage;
+import com.fdbpay.bill.service.dto.refdata.RefDataValue;
 import com.fdbpay.bill.service.dto.request.BillPaymentRequest;
 import com.fdbpay.bill.service.dto.response.BillerResponse;
 import com.fdbpay.bill.service.dto.response.BillLookupResponse;
@@ -9,10 +13,12 @@ import com.fdbpay.bill.service.repository.BillPaymentRepository;
 import com.fdbpay.bill.service.service.BillPaymentService;
 import com.fdbpay.shared.constants.AppConstants;
 import com.fdbpay.shared.constants.ErrorCodes;
+import com.fdbpay.shared.dto.ApiResponse;
 import com.fdbpay.shared.event.TransactionEvent;
 import com.fdbpay.shared.exceptions.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -36,111 +42,68 @@ public class BillPaymentServiceImpl implements BillPaymentService {
     private final RedisTemplate<String, Object> redisTemplate;
 
     private static final String WALLET_SERVICE_BASE = "http://wallet-service/wallet";
-
-    private static final List<BillerResponse> BILLERS = List.of(
-            BillerResponse.builder()
-                    .id(UUID.fromString("a0000000-0000-0000-0000-000000000001"))
-                    .name("MEPCO")
-                    .category("ELECTRICITY")
-                    .description("Myanmar Electric Power Enterprise - Central")
-                    .build(),
-            BillerResponse.builder()
-                    .id(UUID.fromString("a0000000-0000-0000-0000-000000000002"))
-                    .name("SEPE")
-                    .category("ELECTRICITY")
-                    .description("State Electricity Power Enterprise")
-                    .build(),
-            BillerResponse.builder()
-                    .id(UUID.fromString("a0000000-0000-0000-0000-000000000003"))
-                    .name("ZP")
-                    .category("ELECTRICITY")
-                    .description("Yangon Electricity Supply Corporation")
-                    .build(),
-            BillerResponse.builder()
-                    .id(UUID.fromString("b0000000-0000-0000-0000-000000000001"))
-                    .name("Yangon Water")
-                    .category("WATER")
-                    .description("Yangon City Water Supply")
-                    .build(),
-            BillerResponse.builder()
-                    .id(UUID.fromString("b0000000-0000-0000-0000-000000000002"))
-                    .name("Mandalay Water")
-                    .category("WATER")
-                    .description("Mandalay City Water Supply")
-                    .build(),
-            BillerResponse.builder()
-                    .id(UUID.fromString("c0000000-0000-0000-0000-000000000001"))
-                    .name("MPT")
-                    .category("INTERNET")
-                    .description("Myanmar Posts and Telecommunications")
-                    .build(),
-            BillerResponse.builder()
-                    .id(UUID.fromString("c0000000-0000-0000-0000-000000000002"))
-                    .name("5BB")
-                    .category("INTERNET")
-                    .description("5BB Broadband")
-                    .build(),
-            BillerResponse.builder()
-                    .id(UUID.fromString("c0000000-0000-0000-0000-000000000003"))
-                    .name("GTV")
-                    .category("INTERNET")
-                    .description("GTV Internet Services")
-                    .build(),
-            BillerResponse.builder()
-                    .id(UUID.fromString("d0000000-0000-0000-0000-000000000001"))
-                    .name("MyTV")
-                    .category("TV")
-                    .description("MyTV Digital Television")
-                    .build(),
-            BillerResponse.builder()
-                    .id(UUID.fromString("d0000000-0000-0000-0000-000000000002"))
-                    .name("CANAL+")
-                    .category("TV")
-                    .description("CANAL+ Myanmar")
-                    .build()
-    );
-
-    private static final Map<String, String> BILLER_NAMES = Map.of(
-            "a0000000-0000-0000-0000-000000000001", "MEPCO",
-            "a0000000-0000-0000-0000-000000000002", "SEPE",
-            "a0000000-0000-0000-0000-000000000003", "ZP",
-            "b0000000-0000-0000-0000-000000000001", "Yangon Water",
-            "b0000000-0000-0000-0000-000000000002", "Mandalay Water",
-            "c0000000-0000-0000-0000-000000000001", "MPT",
-            "c0000000-0000-0000-0000-000000000002", "5BB",
-            "c0000000-0000-0000-0000-000000000003", "GTV",
-            "d0000000-0000-0000-0000-000000000001", "MyTV",
-            "d0000000-0000-0000-0000-000000000002", "CANAL+"
-    );
-
-    private static final Set<String> CATEGORIES = Set.of("ELECTRICITY", "WATER", "INTERNET", "TV");
+    private static final String REFERENCE_DATA_SERVICE_BASE = "http://reference-data-service/refdata";
+    private static final Set<String> EXCLUDED_CATEGORY_CODES = Set.of("AIRTIME", "BILLER");
 
     @Override
     public List<BillerResponse> getCategories() {
-        return CATEGORIES.stream()
-                .map(cat -> BillerResponse.builder()
-                        .name(cat)
-                        .category(cat)
-                        .build())
-                .toList();
+        try {
+            ApiResponse<RefDataTypePage> resp = webClientBuilder.build()
+                    .get()
+                    .uri(REFERENCE_DATA_SERVICE_BASE + "/types?page=0&size=100")
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<ApiResponse<RefDataTypePage>>() {})
+                    .block();
+            if (resp == null || !resp.isSuccess() || resp.getData() == null || resp.getData().getContent() == null) {
+                return List.of();
+            }
+            return resp.getData().getContent().stream()
+                    .filter(t -> Boolean.TRUE.equals(t.getActive()))
+                    .filter(t -> !EXCLUDED_CATEGORY_CODES.contains(t.getCode()))
+                    .map(t -> BillerResponse.builder()
+                            .name(t.getCode())
+                            .category(t.getCode())
+                            .description(t.getDescription())
+                            .build())
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to load bill categories from reference data: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     @Override
     public List<BillerResponse> getBillers(String category) {
         if (category == null || category.isBlank()) {
-            return BILLERS;
+            return List.of();
         }
-        return BILLERS.stream()
-                .filter(b -> b.getCategory().equalsIgnoreCase(category))
-                .toList();
+        try {
+            ApiResponse<RefDataLookup> resp = webClientBuilder.build()
+                    .get()
+                    .uri(REFERENCE_DATA_SERVICE_BASE + "/type/" + category)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<ApiResponse<RefDataLookup>>() {})
+                    .block();
+            if (resp == null || !resp.isSuccess() || resp.getData() == null || resp.getData().getValues() == null) {
+                return List.of();
+            }
+            return resp.getData().getValues().stream()
+                    .map(v -> BillerResponse.builder()
+                            .id(v.getId())
+                            .name(v.getValue())
+                            .category(category)
+                            .description(v.getCode())
+                            .build())
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Failed to load billers for category {} from reference data: {}", category, e.getMessage());
+            return List.of();
+        }
     }
 
     @Override
     public BillLookupResponse lookupBill(UUID billerId, String accountNumber) {
-        String billerName = BILLER_NAMES.get(billerId.toString());
-        if (billerName == null) {
-            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Unknown biller ID: " + billerId);
-        }
+        String billerName = resolveBillerName(billerId);
 
         long seed = accountNumber.hashCode() & 0xFFFFFFFFL;
         long simulatedAmount = 5000L + (seed % 500000L);
@@ -194,12 +157,13 @@ public class BillPaymentServiceImpl implements BillPaymentService {
 
     private void processBillPayment(BillPayment billPayment) {
         UUID txnId = billPayment.getId();
-        String description = "Bill payment - " + BILLER_NAMES.getOrDefault(billPayment.getBillerId().toString(), "Unknown Biller");
+        String description = "Bill payment - " + resolveBillerName(billPayment.getBillerId());
 
         WebClient webClient = webClientBuilder.build();
+        UUID walletId = getWalletIdByUserId(billPayment.getUserId());
 
         Map<String, Object> debitRequest = Map.of(
-                "walletId", billPayment.getUserId().toString(),
+                "walletId", walletId.toString(),
                 "amount", billPayment.getAmount(),
                 "description", description,
                 "txnId", txnId.toString()
@@ -236,6 +200,42 @@ public class BillPaymentServiceImpl implements BillPaymentService {
 
         log.info("Bill payment completed: id={}, billerId={}, amount={}",
                 txnId, billPayment.getBillerId(), billPayment.getAmount());
+    }
+
+    private UUID getWalletIdByUserId(UUID userId) {
+        Map<?, ?> response = webClientBuilder.build()
+                .get()
+                .uri(WALLET_SERVICE_BASE + "?userId=" + userId)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+
+        if (response == null) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "User wallet could not be resolved");
+        }
+        Object data = response.get("data");
+        Object walletId = data != null ? ((Map<?, ?>) data).get("id") : null;
+        if (walletId == null) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "User wallet could not be resolved");
+        }
+        return UUID.fromString(walletId.toString());
+    }
+
+    private String resolveBillerName(UUID billerId) {
+        try {
+            ApiResponse<RefDataValue> resp = webClientBuilder.build()
+                    .get()
+                    .uri(REFERENCE_DATA_SERVICE_BASE + "/values/" + billerId)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<ApiResponse<RefDataValue>>() {})
+                    .block();
+            if (resp != null && resp.isSuccess() && resp.getData() != null) {
+                return resp.getData().getValue();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve biller name for {} from reference data: {}", billerId, e.getMessage());
+        }
+        return "Unknown Biller";
     }
 
     private void checkIdempotency(String idempotencyKey) {

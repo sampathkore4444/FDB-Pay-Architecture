@@ -146,6 +146,12 @@ spring:
             - Path=/v1/support/**
           filters:
             - StripPrefix=1
+        - id: reference-data-service
+          uri: lb://reference-data-service
+          predicates:
+            - Path=/v1/refdata/**
+          filters:
+            - StripPrefix=1
         - id: wallet-service-savings
           uri: lb://wallet-service
           predicates:

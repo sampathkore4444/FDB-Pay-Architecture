@@ -15,7 +15,9 @@ export function PromotionsPage() {
   const [wallet, setWallet] = useState<CashbackWallet | null>(null);
   const [loading, setLoading] = useState(true);
   const [promoCode, setPromoCode] = useState('');
+  const [amount, setAmount] = useState<number>(5000);
   const [applying, setApplying] = useState(false);
+  const [promoResult, setPromoResult] = useState<{ discount: number; message: string } | null>(null);
   const [redeemAmount, setRedeemAmount] = useState<number>(0);
   const [redeeming, setRedeeming] = useState(false);
 
@@ -40,14 +42,15 @@ export function PromotionsPage() {
   }, [user]);
 
   const handleApply = async () => {
-    if (!user || !promoCode) return;
+    if (!user || !promoCode || !amount) return;
     setApplying(true);
+    setPromoResult(null);
     try {
-      await promotionsApi.apply(user.id, promoCode);
-      setPromoCode('');
-      await loadData();
+      const res = await promotionsApi.validateCode(user.id, promoCode, amount);
+      setPromoResult(res);
     } catch (err) {
       console.error(err);
+      setPromoResult({ discount: 0, message: 'Invalid or expired promo code' });
     } finally {
       setApplying(false);
     }
@@ -84,8 +87,12 @@ export function PromotionsPage() {
   const typeColor = (type: string) => {
     const m: Record<string, string> = {
       DISCOUNT: 'bg-purple-100 text-purple-800',
+      FIXED_DISCOUNT: 'bg-purple-100 text-purple-800',
+      PERCENTAGE_DISCOUNT: 'bg-blue-100 text-blue-800',
       CASHBACK: 'bg-green-100 text-green-800',
       COUPON: 'bg-orange-100 text-orange-800',
+      COUPON_CODE: 'bg-orange-100 text-orange-800',
+      BOGO: 'bg-pink-100 text-pink-800',
     };
     return m[type] || 'bg-gray-100 text-gray-800';
   };
@@ -94,7 +101,8 @@ export function PromotionsPage() {
     const m: Record<string, string> = {
       ACTIVE: 'bg-green-100 text-green-800',
       EXPIRED: 'bg-gray-100 text-gray-600',
-      USED: 'bg-blue-100 text-blue-800',
+      DRAFT: 'bg-yellow-100 text-yellow-800',
+      PAUSED: 'bg-amber-100 text-amber-800',
     };
     return m[s] || 'bg-gray-100 text-gray-800';
   };
@@ -140,8 +148,20 @@ export function PromotionsPage() {
             onChange={(e) => setPromoCode(e.target.value)}
             className="flex-1"
           />
+          <Input
+            type="number"
+            placeholder={t.promotions.minAmount}
+            value={amount || ''}
+            onChange={(e) => setAmount(Number(e.target.value))}
+            className="w-32"
+          />
           <Button onClick={handleApply} loading={applying}>{t.promotions.apply}</Button>
         </div>
+        {promoResult && (
+          <p className={`mt-3 text-sm ${promoResult.discount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {promoResult.message}
+          </p>
+        )}
       </Card>
 
       {loading ? (
@@ -174,15 +194,15 @@ export function PromotionsPage() {
                   {promo.discountValue > 0 && (
                     <p>{t.promotions.discountValue}: {promo.discountValue.toLocaleString()} {promo.type === 'CASHBACK' ? 'MMK' : '%'}</p>
                   )}
-                  {promo.maxDiscount > 0 && (
+                  {promo.maxDiscount != null && promo.maxDiscount > 0 && (
                     <p>{t.promotions.maxDiscount}: {promo.maxDiscount.toLocaleString()} MMK</p>
                   )}
-                  {promo.minAmount > 0 && (
-                    <p>{t.promotions.minAmount}: {promo.minAmount.toLocaleString()} MMK</p>
+                  {promo.minTransactionAmount != null && promo.minTransactionAmount > 0 && (
+                    <p>{t.promotions.minAmount}: {promo.minTransactionAmount.toLocaleString()} MMK</p>
                   )}
-                  <p>{t.promotions.validFrom}: {formatDate(promo.validFrom)}</p>
-                  <p>{t.promotions.validTo}: {formatDate(promo.validTo)}</p>
-                  <p>{t.promotions.usageLimit}: {promo.usedCount}/{promo.usageLimit}</p>
+                  <p>{t.promotions.validFrom}: {formatDate(promo.startDate)}</p>
+                  <p>{t.promotions.validTo}: {formatDate(promo.endDate)}</p>
+                  <p>{t.promotions.usageLimit}: {promo.usageCount}/{promo.maxUsageTotal}</p>
                   {promo.promoCode && <p className="font-mono text-xs bg-gray-50 px-2 py-1 rounded">{promo.promoCode}</p>}
                 </div>
               </div>

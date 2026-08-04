@@ -37,6 +37,7 @@
         <module>remittance-service</module>
         <module>promotions-service</module>
         <module>support-service</module>
+        <module>reference-data-service</module>
         <module>eureka-server</module>
     </modules>
 
