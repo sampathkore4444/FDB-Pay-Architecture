@@ -17,4 +17,6 @@ public interface StaffAccountRepository extends JpaRepository<StaffAccount, UUID
     Optional<StaffAccount> findByMerchantIdAndUserId(UUID merchantId, UUID userId);
 
     List<StaffAccount> findByMerchantIdAndStatus(UUID merchantId, StaffAccountStatus status);
+
+    List<StaffAccount> findAllByUserId(UUID userId);
 }

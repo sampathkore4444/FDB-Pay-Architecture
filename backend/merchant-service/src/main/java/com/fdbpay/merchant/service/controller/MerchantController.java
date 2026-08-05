@@ -4,6 +4,7 @@ import com.fdbpay.shared.dto.ApiResponse;
 import com.fdbpay.merchant.service.dto.request.MerchantRegisterRequest;
 import com.fdbpay.merchant.service.dto.response.MerchantResponse;
 import com.fdbpay.merchant.service.dto.response.QrCodeResponse;
+import com.fdbpay.merchant.service.model.enums.SettlementType;
 import com.fdbpay.merchant.service.service.MerchantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -45,7 +46,31 @@ public class MerchantController {
     }
 
     @GetMapping("/{id}/qr")
-    public ApiResponse<QrCodeResponse> generateQrCode(@PathVariable UUID id) {
-        return ApiResponse.success(merchantService.generateQrCode(id));
+    public ApiResponse<QrCodeResponse> generateQrCode(
+            @PathVariable UUID id,
+            @RequestParam(required = false) Long amount) {
+        return ApiResponse.success(merchantService.generateQrCode(id, amount));
+    }
+
+    @PutMapping("/{id}/settlement-type")
+    public ApiResponse<MerchantResponse> updateSettlementType(
+            @PathVariable UUID id,
+            @RequestParam SettlementType settlementType) {
+        return ApiResponse.success(merchantService.updateSettlementType(id, settlementType));
+    }
+
+    @PutMapping("/{id}/terminal-fields")
+    public ApiResponse<MerchantResponse> updateTerminalFields(
+            @PathVariable UUID id,
+            @RequestBody String terminalFields) {
+        return ApiResponse.success(merchantService.updateTerminalFields(id, terminalFields));
+    }
+
+    @PutMapping("/{id}/reserve")
+    public ApiResponse<MerchantResponse> updateRollingReserve(
+            @PathVariable UUID id,
+            @RequestParam Integer percent,
+            @RequestParam(defaultValue = "7") Integer periodDays) {
+        return ApiResponse.success(merchantService.updateRollingReserve(id, percent, periodDays));
     }
 }

@@ -4,6 +4,7 @@ import com.fdbpay.merchant.service.model.enums.StaffRole;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -20,4 +21,8 @@ public class AddStaffRequest {
     private StaffRole role;
 
     private Long dailyLimit;
+
+    private UUID storeId;
+
+    private List<String> permissions;
 }

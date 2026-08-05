@@ -10,6 +10,7 @@ import com.fdbpay.merchant.service.dto.response.MerchantResponse;
 import com.fdbpay.merchant.service.dto.response.QrCodeResponse;
 import com.fdbpay.merchant.service.model.Merchant;
 import com.fdbpay.merchant.service.model.enums.MerchantStatus;
+import com.fdbpay.merchant.service.model.enums.SettlementType;
 import com.fdbpay.merchant.service.repository.MerchantRepository;
 import com.fdbpay.merchant.service.service.MerchantService;
 import lombok.RequiredArgsConstructor;
@@ -116,7 +117,7 @@ public class MerchantServiceImpl implements MerchantService {
     }
 
     @Override
-    public QrCodeResponse generateQrCode(UUID merchantId) {
+    public QrCodeResponse generateQrCode(UUID merchantId, Long amount) {
         Merchant merchant = merchantRepository.findById(merchantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Merchant", merchantId.toString()));
 
@@ -128,6 +129,10 @@ public class MerchantServiceImpl implements MerchantService {
         String deepLink = "fdbpay://pay?merchant=" + merchant.getId()
                 + "&name=" + merchant.getBusinessName();
         String qrUrl = "https://pay.fdbpay.com/qr/" + merchant.getId();
+        if (amount != null && amount > 0) {
+            deepLink += "&amount=" + amount;
+            qrUrl += "?amount=" + amount;
+        }
 
         QrCodeResponse response = QrCodeResponse.builder()
                 .merchantId(merchant.getId())
@@ -138,8 +143,51 @@ public class MerchantServiceImpl implements MerchantService {
         merchant.setQrStaticUrl(qrUrl);
         merchantRepository.save(merchant);
 
-        log.info("QR code generated: merchantId={}", merchantId);
+        log.info("QR code generated: merchantId={}, amount={}", merchantId, amount);
         return response;
+    }
+
+    @Override
+    @Transactional
+    public MerchantResponse updateSettlementType(UUID merchantId, SettlementType settlementType) {
+        Merchant merchant = merchantRepository.findById(merchantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Merchant", merchantId.toString()));
+        merchant.setSettlementType(settlementType);
+        merchant.setUpdatedAt(OffsetDateTime.now());
+        merchant = merchantRepository.save(merchant);
+        log.info("Merchant settlement type updated: merchantId={}, type={}", merchantId, settlementType);
+        return mapToResponse(merchant);
+    }
+
+    @Override
+    @Transactional
+    public MerchantResponse updateTerminalFields(UUID merchantId, String terminalFields) {
+        Merchant merchant = merchantRepository.findById(merchantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Merchant", merchantId.toString()));
+        merchant.setTerminalFields(terminalFields);
+        merchant.setUpdatedAt(OffsetDateTime.now());
+        merchant = merchantRepository.save(merchant);
+        log.info("Merchant terminal fields updated: merchantId={}", merchantId);
+        return mapToResponse(merchant);
+    }
+
+    @Override
+    @Transactional
+    public MerchantResponse updateRollingReserve(UUID merchantId, Integer percent, Integer periodDays) {
+        if (percent == null || percent < 0 || percent > 100) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Rolling reserve percent must be between 0 and 100");
+        }
+        if (periodDays == null || periodDays < 1) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Rolling reserve period must be at least 1 day");
+        }
+        Merchant merchant = merchantRepository.findById(merchantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Merchant", merchantId.toString()));
+        merchant.setRollingReservePercent(percent);
+        merchant.setRollingReservePeriodDays(periodDays);
+        merchant.setUpdatedAt(OffsetDateTime.now());
+        merchant = merchantRepository.save(merchant);
+        log.info("Merchant rolling reserve updated: merchantId={}, percent={}, periodDays={}", merchantId, percent, periodDays);
+        return mapToResponse(merchant);
     }
 
     private void publishMerchantRegisteredEvent(Merchant merchant) {
@@ -175,6 +223,10 @@ public class MerchantServiceImpl implements MerchantService {
                 .latitude(merchant.getLatitude())
                 .longitude(merchant.getLongitude())
                 .qrStaticUrl(merchant.getQrStaticUrl())
+                .rollingReservePercent(merchant.getRollingReservePercent())
+                .rollingReservePeriodDays(merchant.getRollingReservePeriodDays())
+                .rollingReserveBalance(merchant.getRollingReserveBalance())
+                .terminalFields(merchant.getTerminalFields())
                 .createdAt(merchant.getCreatedAt())
                 .updatedAt(merchant.getUpdatedAt())
                 .build();

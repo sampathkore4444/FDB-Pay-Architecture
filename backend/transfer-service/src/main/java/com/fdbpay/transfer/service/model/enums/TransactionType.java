@@ -10,5 +10,7 @@ public enum TransactionType {
     REFUND,
     CASH_IN,
     CASH_OUT,
-    SETTLEMENT
+    SETTLEMENT,
+    CARD_PAYMENT,
+    PAYMENT_LINK
 }

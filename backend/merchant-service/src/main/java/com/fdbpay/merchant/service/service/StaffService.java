@@ -16,4 +16,6 @@ public interface StaffService {
     List<StaffAccountResponse> getStaffByMerchant(UUID merchantId);
 
     StaffAccountResponse updateStaffRole(UUID staffId, StaffRole role, UUID merchantId);
+
+    StaffAccountResponse updateStaffPermissions(UUID staffId, UUID merchantId, List<String> permissions);
 }

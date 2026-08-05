@@ -42,6 +42,11 @@ public class StaffAccount {
 
     private Long dailyLimit;
 
+    private UUID storeId;
+
+    @Column(columnDefinition = "TEXT")
+    private String permissions;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

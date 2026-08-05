@@ -35,4 +35,6 @@ public interface AuthService {
     void updateUserStatus(UUID userId, UserStatus status, String reason);
 
     void updateUserRole(UUID userId, UserRole role);
+
+    UserProfileResponse getUserById(UUID userId);
 }

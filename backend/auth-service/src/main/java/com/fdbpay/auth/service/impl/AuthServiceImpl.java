@@ -336,4 +336,11 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
         log.info("User {} role updated to {}", userId, role);
     }
+
+    @Override
+    public UserProfileResponse getUserById(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCodes.USER_NOT_FOUND, "User not found with id: " + userId));
+        return UserProfileResponse.from(user);
+    }
 }

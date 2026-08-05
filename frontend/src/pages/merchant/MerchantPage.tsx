@@ -213,6 +213,18 @@ export function MerchantPage() {
           <Button variant="secondary" className="w-full" onClick={() => window.location.href = '/merchant/promotions'}>
             {t.nav.merchantPromotions}
           </Button>
+          <Button variant="secondary" className="w-full" onClick={() => window.location.href = '/merchant/payment-links'}>
+            {t.nav.paymentLinks}
+          </Button>
+          <Button variant="secondary" className="w-full" onClick={() => window.location.href = '/merchant/terminal'}>
+            {t.nav.terminal}
+          </Button>
+          <Button variant="secondary" className="w-full" onClick={() => window.location.href = '/merchant/qr'}>
+            {t.nav.dynamicQr}
+          </Button>
+          <Button variant="secondary" className="w-full" onClick={() => window.location.href = '/merchant/statements'}>
+            {t.nav.statements}
+          </Button>
           <Button variant="secondary" className="w-full" onClick={() => window.location.href = '/invoices'}>
             {t.nav.invoices}
           </Button>

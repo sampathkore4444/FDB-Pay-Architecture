@@ -4,6 +4,7 @@ import com.fdbpay.merchant.service.dto.request.MerchantRegisterRequest;
 import com.fdbpay.merchant.service.dto.response.MerchantResponse;
 import com.fdbpay.merchant.service.dto.response.QrCodeResponse;
 import com.fdbpay.merchant.service.model.enums.MerchantStatus;
+import com.fdbpay.merchant.service.model.enums.SettlementType;
 
 import java.util.List;
 import java.util.UUID;
@@ -18,7 +19,13 @@ public interface MerchantService {
 
     MerchantResponse updateProfile(UUID merchantId, MerchantRegisterRequest request);
 
-    QrCodeResponse generateQrCode(UUID merchantId);
+    QrCodeResponse generateQrCode(UUID merchantId, Long amount);
+
+    MerchantResponse updateSettlementType(UUID merchantId, SettlementType settlementType);
+
+    MerchantResponse updateTerminalFields(UUID merchantId, String terminalFields);
+
+    MerchantResponse updateRollingReserve(UUID merchantId, Integer percent, Integer periodDays);
 
     List<MerchantResponse> getMerchants(String search, MerchantStatus status, int page, int size);
 

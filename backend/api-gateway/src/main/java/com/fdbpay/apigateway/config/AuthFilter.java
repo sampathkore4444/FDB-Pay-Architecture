@@ -36,6 +36,7 @@ public class AuthFilter implements GlobalFilter, Ordered {
             "/v1/auth/register",
             "/v1/auth/login",
             "/v1/auth/otp/**",
+            "/v1/payment-links/token/**",
             "/v1/health",
             "/actuator/**",
             "/swagger-ui.html",

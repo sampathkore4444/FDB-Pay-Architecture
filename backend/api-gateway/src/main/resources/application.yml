@@ -176,6 +176,12 @@ spring:
             - Path=/v1/invoices/**
           filters:
             - RewritePath=/v1/invoices(?<segment>.*), /merchant/invoices${segment}
+        - id: merchant-service-payment-links
+          uri: lb://merchant-service
+          predicates:
+            - Path=/v1/payment-links/**
+          filters:
+            - StripPrefix=1
         - id: transfer-service-schedule
           uri: lb://transfer-service
           predicates:

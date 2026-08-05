@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
-
 @RestController
 @RequestMapping("/staff")
 @RequiredArgsConstructor
@@ -46,5 +45,13 @@ public class StaffController {
             @PathVariable UUID staffId,
             @RequestParam StaffRole role) {
         return ApiResponse.success(staffService.updateStaffRole(staffId, role, merchantId));
+    }
+
+    @PutMapping("/{staffId}/permissions")
+    public ApiResponse<StaffAccountResponse> updateStaffPermissions(
+            @RequestParam UUID merchantId,
+            @PathVariable UUID staffId,
+            @RequestBody List<String> permissions) {
+        return ApiResponse.success(staffService.updateStaffPermissions(staffId, merchantId, permissions));
     }
 }

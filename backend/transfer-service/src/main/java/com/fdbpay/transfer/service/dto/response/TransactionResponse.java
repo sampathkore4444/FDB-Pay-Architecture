@@ -25,6 +25,7 @@ public class TransactionResponse {
     private String currency;
     private String description;
     private String metadata;
+    private UUID parentTransactionId;
     private OffsetDateTime createdAt;
     private OffsetDateTime completedAt;
     private String failureReason;

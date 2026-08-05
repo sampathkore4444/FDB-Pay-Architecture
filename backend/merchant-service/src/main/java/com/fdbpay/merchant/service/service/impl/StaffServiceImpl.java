@@ -1,8 +1,6 @@
 package com.fdbpay.merchant.service.service.impl;
 
-import com.fdbpay.shared.constants.ErrorCodes;
-import com.fdbpay.shared.exceptions.BusinessException;
-import com.fdbpay.shared.exceptions.ResourceNotFoundException;
+import com.fdbpay.merchant.service.client.AuthServiceClient;
 import com.fdbpay.merchant.service.dto.request.AddStaffRequest;
 import com.fdbpay.merchant.service.dto.response.StaffAccountResponse;
 import com.fdbpay.merchant.service.model.Merchant;
@@ -12,13 +10,19 @@ import com.fdbpay.merchant.service.model.enums.StaffRole;
 import com.fdbpay.merchant.service.repository.MerchantRepository;
 import com.fdbpay.merchant.service.repository.StaffAccountRepository;
 import com.fdbpay.merchant.service.service.StaffService;
+import com.fdbpay.shared.constants.ErrorCodes;
+import com.fdbpay.shared.exceptions.BusinessException;
+import com.fdbpay.shared.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -27,6 +31,13 @@ public class StaffServiceImpl implements StaffService {
 
     private final StaffAccountRepository staffAccountRepository;
     private final MerchantRepository merchantRepository;
+    private final AuthServiceClient authServiceClient;
+
+    private static final Map<StaffRole, List<String>> DEFAULT_PERMISSIONS = Map.of(
+            StaffRole.OWNER, List.of("terminal", "refunds", "reports", "links", "settlements", "staff"),
+            StaffRole.MANAGER, List.of("terminal", "refunds", "reports", "links", "settlements"),
+            StaffRole.CASHIER, List.of("terminal"),
+            StaffRole.VIEWER, List.of("reports"));
 
     @Override
     @Transactional
@@ -49,6 +60,8 @@ public class StaffServiceImpl implements StaffService {
                 .role(request.getRole())
                 .status(StaffAccountStatus.ACTIVE)
                 .dailyLimit(request.getDailyLimit())
+                .storeId(request.getStoreId())
+                .permissions(resolvePermissions(request.getRole(), request.getPermissions()))
                 .build();
 
         staff = staffAccountRepository.save(staff);
@@ -99,20 +112,60 @@ public class StaffServiceImpl implements StaffService {
         }
 
         staff.setRole(role);
+        staff.setPermissions(resolvePermissions(role, staff.getPermissions() != null
+                ? parsePermissions(staff.getPermissions()) : null));
         staff = staffAccountRepository.save(staff);
         log.info("Staff role updated: staffId={}, newRole={}", staffId, role);
 
         return mapToResponse(staff);
     }
 
+    @Override
+    @Transactional
+    public StaffAccountResponse updateStaffPermissions(UUID staffId, UUID merchantId, List<String> permissions) {
+        StaffAccount staff = staffAccountRepository.findById(staffId)
+                .orElseThrow(() -> new ResourceNotFoundException("StaffAccount", staffId.toString()));
+
+        if (!staff.getMerchantId().equals(merchantId)) {
+            throw new BusinessException(ErrorCodes.UNAUTHORIZED, "Staff does not belong to this merchant");
+        }
+
+        staff.setPermissions(String.join(",", permissions));
+        staff = staffAccountRepository.save(staff);
+        log.info("Staff permissions updated: staffId={}", staffId);
+        return mapToResponse(staff);
+    }
+
+    private String resolvePermissions(StaffRole role, List<String> requested) {
+        if (requested != null && !requested.isEmpty()) {
+            return String.join(",", requested);
+        }
+        return String.join(",", DEFAULT_PERMISSIONS.getOrDefault(role, List.of()));
+    }
+
+    private List<String> parsePermissions(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(raw.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
+    }
+
     private StaffAccountResponse mapToResponse(StaffAccount staff) {
+        Map<String, String> user = authServiceClient.getUser(staff.getUserId());
         return StaffAccountResponse.builder()
                 .id(staff.getId())
                 .merchantId(staff.getMerchantId())
                 .userId(staff.getUserId())
+                .userName(user.getOrDefault("name", ""))
+                .userPhone(user.getOrDefault("phone", ""))
                 .role(staff.getRole())
                 .status(staff.getStatus())
                 .dailyLimit(staff.getDailyLimit())
+                .storeId(staff.getStoreId())
+                .permissions(parsePermissions(staff.getPermissions()))
                 .createdAt(staff.getCreatedAt())
                 .build();
     }

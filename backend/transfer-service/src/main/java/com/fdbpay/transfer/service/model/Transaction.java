@@ -62,6 +62,8 @@ public class Transaction {
     @Column(columnDefinition = "jsonb")
     private String metadata;
 
+    private UUID parentTransactionId;
+
     @Builder.Default
     @Column(nullable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();

@@ -35,4 +35,25 @@ public class AuthServiceClient {
                     "Failed to upgrade user role after merchant approval");
         }
     }
+
+    public Map<String, String> getUser(UUID userId) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = restClient.get()
+                    .uri("/internal/users/{id}", userId)
+                    .retrieve()
+                    .body(Map.class);
+            if (body == null || body.get("data") == null) {
+                return Map.of();
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = (Map<String, Object>) body.get("data");
+            return Map.of(
+                    "name", String.valueOf(data.getOrDefault("name", "")),
+                    "phone", String.valueOf(data.getOrDefault("phone", "")));
+        } catch (Exception e) {
+            log.warn("Failed to fetch user {} for enrichment: {}", userId, e.getMessage());
+            return Map.of();
+        }
+    }
 }

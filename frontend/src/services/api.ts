@@ -6,6 +6,8 @@ import type {
   ReferenceType, ReferenceTypeSummary, ReferenceValue, ReferenceDataLookup,
   PromotionStatus, PromotionValidation, PromotionUsage,
   MerchantAnalyticsSummary, MerchantAnalyticsBenchmark, AnalyticsTransactionRow,
+  PaymentLink, PaymentLinkPublic, BulkOperationResponse, MerchantStatement,
+  StaffAccount, Store, Chargeback, FinancingEligibility, FinancingApplication, RiskAlert, ReconciliationRow,
 } from '../types';
 import { useAuthStore } from '../store/authStore';
 
@@ -94,7 +96,7 @@ export const transferApi = {
     api.get<ApiResponse<Transaction>>(`/transfer/${id}`).then((r) => r.data.data),
 
   getHistory: (userId: string, page = 0, size = 20) =>
-    api.get<ApiResponse<{ transactions: Transaction[] }>>(`/transfer/history?userId=${userId}&page=${page}&size=${size}`).then((r) => r.data.data),
+    api.get<ApiResponse<{ content: Transaction[] }>>(`/transfer/history?userId=${userId}&page=${page}&size=${size}`).then((r) => r.data.data?.content || []),
 };
 
 export const merchantApi = {
@@ -104,8 +106,48 @@ export const merchantApi = {
   getProfile: (userId: string) =>
     api.get<ApiResponse<Merchant>>(`/merchant/by-user/${userId}`).then((r) => r.data.data),
 
-  generateQr: (merchantId: string, _type = 'static', _amount?: number) =>
-    api.get<ApiResponse<{ qrUrl: string; deepLink: string }>>(`/merchant/${merchantId}/qr`).then((r) => ({ qrData: r.data.data?.deepLink || r.data.data?.qrUrl || '' })),
+  generateQr: (merchantId: string, _type = 'static', amount?: number) =>
+    api.get<ApiResponse<{ qrUrl: string; deepLink: string }>>(`/merchant/${merchantId}/qr${amount ? `?amount=${amount}` : ''}`).then((r) => ({ qrData: r.data.data?.deepLink || r.data.data?.qrUrl || '', qrUrl: r.data.data?.qrUrl || '', deepLink: r.data.data?.deepLink || '' })),
+
+  updateSettlementType: (merchantId: string, settlementType: string) =>
+    api.put<ApiResponse<Merchant>>(`/merchant/${merchantId}/settlement-type?settlementType=${settlementType}`).then((r) => r.data.data),
+
+  updateTerminalFields: (merchantId: string, terminalFields: string) =>
+    api.put<ApiResponse<Merchant>>(`/merchant/${merchantId}/terminal-fields`, terminalFields, { headers: { 'Content-Type': 'application/json' } }).then((r) => r.data.data),
+
+  updateReserve: (merchantId: string, percent: number, periodDays: number) =>
+    api.put<ApiResponse<Merchant>>(`/merchant/${merchantId}/reserve?percent=${percent}&periodDays=${periodDays}`).then((r) => r.data.data),
+};
+
+export const paymentLinksApi = {
+  create: (userId: string, data: { amount: number; description?: string; customerPhone?: string; customerName?: string; expiresAt?: string }) =>
+    api.post<ApiResponse<PaymentLink>>(`/merchant/payment-links?userId=${userId}`, data).then((r) => r.data.data),
+
+  getMy: (userId: string, page = 0, size = 20) =>
+    api.get<ApiResponse<{ content: PaymentLink[]; totalElements: number }>>(`/merchant/payment-links?userId=${userId}&page=${page}&size=${size}`).then((r) => r.data.data),
+
+  deactivate: (userId: string, id: string) =>
+    api.put<ApiResponse<PaymentLink>>(`/merchant/payment-links/${id}/deactivate?userId=${userId}`).then((r) => r.data.data),
+
+  getByToken: (token: string) =>
+    api.get<ApiResponse<PaymentLinkPublic>>(`/payment-links/token/${token}`).then((r) => r.data.data),
+
+  markPaid: (token: string) =>
+    api.post<ApiResponse<PaymentLinkPublic>>(`/payment-links/token/${token}/paid`).then((r) => r.data.data),
+};
+
+export const merchantOpsApi = {
+  charge: (merchantUserId: string, data: { customerPhone: string; customerName?: string; cardLast4: string; amount: number; description?: string }) =>
+    api.post<ApiResponse<Transaction>>(`/transfer/charge?merchantUserId=${merchantUserId}`, { ...data, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
+
+  bulkRefund: (merchantUserId: string, transactionIds: string[], reason?: string) =>
+    api.post<ApiResponse<BulkOperationResponse>>(`/transfer/refunds?merchantUserId=${merchantUserId}`, { transactionIds, reason, idempotencyKey: `idem_refund_${Date.now()}` }).then((r) => r.data.data),
+
+  bulkVoid: (merchantUserId: string, transactionIds: string[]) =>
+    api.post<ApiResponse<BulkOperationResponse>>(`/transfer/voids?merchantUserId=${merchantUserId}`, { transactionIds }).then((r) => r.data.data),
+
+  getStatement: (walletId: string, params: { from?: string; to?: string; rollingReservePercent?: number; rollingReservePeriodDays?: number }) =>
+    api.get<ApiResponse<MerchantStatement>>(`/transfer/statements/merchant?walletId=${walletId}`, { params }).then((r) => r.data.data),
 };
 
 export const billApi = {
@@ -305,17 +347,78 @@ export const auditApi = {
 };
 
 export const staffApi = {
-  addStaff: (merchantId: string, userId: string, data: { userId: string; role: string; dailyLimit: number }) =>
-    api.post<ApiResponse<{ id: string }>>(`/staff?merchantId=${merchantId}&userId=${userId}`, { userId: data.userId, role: data.role.toUpperCase(), dailyLimit: data.dailyLimit, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
+  addStaff: (merchantId: string, userId: string, data: { userId: string; role: string; dailyLimit: number; storeId?: string; permissions?: string[] }) =>
+    api.post<ApiResponse<StaffAccount>>(`/staff?merchantId=${merchantId}&userId=${userId}`, { userId: data.userId, role: data.role.toUpperCase(), dailyLimit: data.dailyLimit, storeId: data.storeId, permissions: data.permissions, idempotencyKey: `idem_${Date.now()}` }).then((r) => r.data.data),
 
   removeStaff: (ownerId: string, staffId: string) =>
     api.delete<ApiResponse<void>>(`/staff/${staffId}?merchantId=${ownerId}`).then((r) => r.data.data),
 
   getStaff: (ownerId: string) =>
-    api.get<ApiResponse<{ id: string; userId: string; userName: string; userPhone: string; role: string; dailyLimit: number; status: string }[]>>(`/staff?merchantId=${ownerId}`).then((r) => (r.data.data || []).map((s) => ({ ...s, role: (s.role || '').toLowerCase() }))),
+    api.get<ApiResponse<StaffAccount[]>>(`/staff?merchantId=${ownerId}`).then((r) => (r.data.data || []).map((s) => ({ ...s, role: (s.role || '').toLowerCase() }))),
 
   changeRole: (ownerId: string, staffId: string, newRole: string) =>
-    api.put<ApiResponse<void>>(`/staff/${staffId}/role?merchantId=${ownerId}&role=${newRole.toUpperCase()}`).then((r) => r.data.data),
+    api.put<ApiResponse<StaffAccount>>(`/staff/${staffId}/role?merchantId=${ownerId}&role=${newRole.toUpperCase()}`).then((r) => r.data.data),
+
+  updatePermissions: (ownerId: string, staffId: string, permissions: string[]) =>
+    api.put<ApiResponse<StaffAccount>>(`/staff/${staffId}/permissions?merchantId=${ownerId}`, permissions).then((r) => r.data.data),
+};
+
+export const storeApi = {
+  getStores: (userId: string) =>
+    api.get<ApiResponse<Store[]>>(`/merchant/stores?userId=${userId}`).then((r) => r.data.data || []),
+
+  createStore: (userId: string, data: { name: string; address?: string; city?: string; phone?: string }) =>
+    api.post<ApiResponse<Store>>(`/merchant/stores?userId=${userId}`, data).then((r) => r.data.data),
+
+  updateStore: (userId: string, storeId: string, data: { name: string; address?: string; city?: string; phone?: string }) =>
+    api.put<ApiResponse<Store>>(`/merchant/stores/${storeId}?userId=${userId}`, data).then((r) => r.data.data),
+};
+
+export const chargebackApi = {
+  getByMerchant: (userId: string) =>
+    api.get<ApiResponse<Chargeback[]>>(`/merchant/chargebacks?userId=${userId}`).then((r) => r.data.data || []),
+
+  getDetail: (userId: string, id: string) =>
+    api.get<ApiResponse<Chargeback>>(`/merchant/chargebacks/${id}?userId=${userId}`).then((r) => r.data.data),
+
+  open: (userId: string, data: { transactionId?: string; amount: number; reasonCode?: string; customerNotes?: string }) =>
+    api.post<ApiResponse<Chargeback>>(`/merchant/chargebacks?userId=${userId}`, data).then((r) => r.data.data),
+
+  addNote: (userId: string, id: string, message: string, authorName?: string) =>
+    api.post<ApiResponse<Chargeback>>(`/merchant/chargebacks/${id}/notes?userId=${userId}`, { message, authorName }).then((r) => r.data.data),
+
+  respond: (userId: string, id: string, status: string, note?: string) =>
+    api.put<ApiResponse<Chargeback>>(`/merchant/chargebacks/${id}/respond?userId=${userId}`, { status, note }).then((r) => r.data.data),
+};
+
+export const financingApi = {
+  getEligibility: (userId: string, walletId: string) =>
+    api.get<ApiResponse<FinancingEligibility>>(`/merchant/financing/eligibility?userId=${userId}&walletId=${walletId}`).then((r) => r.data.data),
+
+  apply: (userId: string, walletId: string, data: { requestedAmount: number; termMonths: number; purpose?: string }) =>
+    api.post<ApiResponse<FinancingApplication>>(`/merchant/financing/applications?userId=${userId}&walletId=${walletId}`, data).then((r) => r.data.data),
+
+  getApplications: (userId: string) =>
+    api.get<ApiResponse<FinancingApplication[]>>(`/merchant/financing/applications?userId=${userId}`).then((r) => r.data.data || []),
+};
+
+export const riskApi = {
+  getAlerts: (userId: string, walletId: string) =>
+    api.get<ApiResponse<RiskAlert[]>>(`/merchant/risk-alerts?userId=${userId}&walletId=${walletId}`).then((r) => r.data.data || []),
+
+  acknowledge: (userId: string, id: string) =>
+    api.put<ApiResponse<RiskAlert>>(`/merchant/risk-alerts/${id}/acknowledge?userId=${userId}`).then((r) => r.data.data),
+};
+
+export const reconciliationApi = {
+  get: (params: { walletId: string; merchantId: string; from: string; to: string }) =>
+    api.get<ApiResponse<ReconciliationRow[]>>(`/transfer/reconciliation?walletId=${params.walletId}&merchantId=${params.merchantId}&from=${params.from}&to=${params.to}`).then((r) => r.data.data || []),
+
+  downloadCsv: (params: { walletId: string; merchantId: string; from: string; to: string }) => {
+    const token = useAuthStore.getState().accessToken;
+    const url = `/v1/transfer/reconciliation?walletId=${params.walletId}&merchantId=${params.merchantId}&from=${params.from}&to=${params.to}&format=csv`;
+    return fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then((res) => res.text());
+  },
 };
 
 interface DirectoryEntry {

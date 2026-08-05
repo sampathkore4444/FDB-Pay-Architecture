@@ -52,6 +52,10 @@ export interface Merchant {
   feeSchedule: string;
   address?: string;
   qrStaticUrl?: string;
+  rollingReservePercent?: number;
+  rollingReservePeriodDays?: number;
+  rollingReserveBalance?: number;
+  terminalFields?: string;
   createdAt: string;
 }
 
@@ -330,4 +334,196 @@ export interface PromotionUsage {
   discountApplied: number;
   cashbackAmount: number;
   createdAt: string;
+}
+
+export type PaymentLinkStatus = 'ACTIVE' | 'PAID' | 'EXPIRED' | 'DEACTIVATED';
+
+export interface PaymentLink {
+  id: string;
+  merchantId: string;
+  token: string;
+  amount: number;
+  description?: string;
+  customerPhone?: string;
+  customerName?: string;
+  status: PaymentLinkStatus;
+  singleUse: boolean;
+  paidAt?: string;
+  expiresAt?: string;
+  createdAt: string;
+}
+
+export interface PaymentLinkPublic {
+  token: string;
+  merchantId: string;
+  merchantName: string;
+  amount: number;
+  description?: string;
+  status: PaymentLinkStatus;
+  createdAt: string;
+}
+
+export interface BulkOperationResult {
+  transactionId: string;
+  success: boolean;
+  message: string;
+}
+
+export interface BulkOperationResponse {
+  successCount: number;
+  failedCount: number;
+  results: BulkOperationResult[];
+}
+
+export interface GrossByType {
+  type: string;
+  count: number;
+  volume: number;
+  fees: number;
+}
+
+export interface FeeBreakdown {
+  transactionFees: number;
+  cardFees: number;
+  refundFees: number;
+  serviceFees: number;
+}
+
+export interface RollingReserveInfo {
+  percent: number;
+  heldThisPeriod: number;
+  releasedThisPeriod: number;
+  currentBalance: number;
+}
+
+export interface MerchantStatement {
+  periodStart: string;
+  periodEnd: string;
+  totalVolume: number;
+  transactionCount: number;
+  feeBreakdown: FeeBreakdown;
+  totalFees: number;
+  netSales: number;
+  refundCount: number;
+  refundAmount: number;
+  grossByType: GrossByType[];
+  rollingReserve: RollingReserveInfo;
+}
+
+export interface TerminalFieldOption {
+  key: string;
+  label: string;
+  enabled: boolean;
+  required: boolean;
+}
+
+export interface StaffAccount {
+  id: string;
+  merchantId: string;
+  userId: string;
+  userName?: string;
+  userPhone?: string;
+  role: 'OWNER' | 'MANAGER' | 'CASHIER' | 'VIEWER' | string;
+  status: string;
+  dailyLimit?: number;
+  storeId?: string;
+  permissions?: string[];
+  createdAt: string;
+}
+
+export interface Store {
+  id: string;
+  merchantId: string;
+  name: string;
+  address?: string;
+  city?: string;
+  phone?: string;
+  status: string;
+  createdAt: string;
+}
+
+export type ChargebackStatus = 'OPEN' | 'RESPONDED' | 'WON' | 'LOST' | 'CLOSED';
+export type ChargebackReason =
+  | 'DUPLICATE_CHARGE'
+  | 'GOODS_NOT_RECEIVED'
+  | 'GOODS_DEFECTIVE'
+  | 'UNAUTHORIZED'
+  | 'WRONG_AMOUNT'
+  | 'CANCELLED_ORDER'
+  | 'OTHER';
+
+export interface ChargebackNote {
+  id: string;
+  authorType?: string;
+  authorName?: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface Chargeback {
+  id: string;
+  merchantId: string;
+  transactionId?: string;
+  amount: number;
+  currency?: string;
+  reasonCode?: ChargebackReason | string;
+  status: ChargebackStatus | string;
+  customerNotes?: string;
+  deadline?: string;
+  createdAt: string;
+  updatedAt?: string;
+  notes?: ChargebackNote[];
+}
+
+export interface FinancingEligibility {
+  eligible: boolean;
+  monthlyRevenue: number;
+  threeMonthVolume: number;
+  avgDailySales: number;
+  estimatedLimit: number;
+  maxTermMonths: number;
+  message?: string;
+}
+
+export type FinancingStatus = 'PENDING' | 'APPROVED' | 'DECLINED' | 'DISBURSED';
+
+export interface FinancingApplication {
+  id: string;
+  merchantId: string;
+  requestedAmount: number;
+  termMonths: number;
+  purpose?: string;
+  monthlyRevenue: number;
+  estimatedLimit: number;
+  status: FinancingStatus | string;
+  adminNote?: string;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
+export type RiskSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface RiskAlert {
+  id: string;
+  merchantId: string;
+  alertType?: string;
+  severity: RiskSeverity | string;
+  title: string;
+  message?: string;
+  status: 'OPEN' | 'ACKNOWLEDGED' | string;
+  createdAt: string;
+  acknowledgedAt?: string;
+}
+
+export interface ReconciliationRow {
+  date: string;
+  grossSales: number;
+  saleCount: number;
+  refundAmount: number;
+  refundCount: number;
+  fees: number;
+  netSales: number;
+  settlementRef?: string;
+  settledAt?: string;
+  status: string;
 }
