@@ -48,7 +48,7 @@
         <shared.version>1.0.0-SNAPSHOT</shared.version>
         <springdoc.version>2.6.0</springdoc.version>
         <spring-kafka.version>3.2.2</spring-kafka.version>
-        <kafka.version>3.7.1</kafka.version>
+        <kafka.version>3.9.2</kafka.version>
     </properties>
 
     <dependencyManagement>
