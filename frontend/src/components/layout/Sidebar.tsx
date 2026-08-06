@@ -50,6 +50,18 @@ const icons: Record<string, string> = {
   remittance: '🌏',
   promotions: '🎉',
   support: '🎧',
+  recurringBilling: '🔁',
+  payout: '🏦',
+  merchantSettings: '⚙️',
+  storeCompare: '⚖️',
+  products: '🛍️',
+  coupons: '🎟️',
+  campaigns: '💰',
+  loyalty: '⭐',
+  referral: '🤝',
+  customers: '🧑‍🤝‍🧑',
+  auditLog: '📜',
+  developer: '🧑‍💻',
 };
 
 interface NavItem {
@@ -95,6 +107,18 @@ const navItems: NavItem[] = [
   { key: 'disputes', route: '/disputes', roles: ['CONSUMER', 'MERCHANT', 'AGENT', 'CORPORATE', 'ADMIN'], group: 'risk' },
   { key: 'staff', route: '/staff', roles: ['MERCHANT'], group: 'management' },
   { key: 'settlements', route: '/settlements', roles: ['MERCHANT'], group: 'management' },
+  { key: 'recurringBilling', route: '/merchant/recurring', roles: ['MERCHANT'], group: 'payments' },
+  { key: 'payout', route: '/merchant/payout', roles: ['MERCHANT'], group: 'management' },
+  { key: 'merchantSettings', route: '/merchant/settings', roles: ['MERCHANT'], group: 'management' },
+  { key: 'storeCompare', route: '/merchant/store-compare', roles: ['MERCHANT'], group: 'overview' },
+  { key: 'products', route: '/merchant/products', roles: ['MERCHANT'], group: 'business' },
+  { key: 'coupons', route: '/merchant/coupons', roles: ['MERCHANT'], group: 'business' },
+  { key: 'campaigns', route: '/merchant/campaigns', roles: ['MERCHANT'], group: 'business' },
+  { key: 'loyalty', route: '/merchant/loyalty', roles: ['MERCHANT'], group: 'business' },
+  { key: 'referral', route: '/merchant/referral', roles: ['MERCHANT'], group: 'business' },
+  { key: 'customers', route: '/merchant/customers', roles: ['MERCHANT'], group: 'overview' },
+  { key: 'auditLog', route: '/merchant/audit-log', roles: ['MERCHANT'], group: 'management' },
+  { key: 'developer', route: '/merchant/developer', roles: ['MERCHANT'], group: 'management' },
 
   { key: 'agent', route: '/agent', roles: ['AGENT'] },
 

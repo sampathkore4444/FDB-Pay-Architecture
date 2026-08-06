@@ -527,3 +527,173 @@ export interface ReconciliationRow {
   settledAt?: string;
   status: string;
 }
+
+export type ActiveStatus = 'ACTIVE' | 'INACTIVE';
+export type DiscountType = 'PERCENT' | 'FIXED';
+export type RecurringInterval = 'WEEKLY' | 'MONTHLY';
+export type RecurringPlanStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED';
+export type ReviewStatus = 'PUBLISHED' | 'HIDDEN';
+
+export interface RecurringPlan {
+  id: string;
+  merchantId: string;
+  name: string;
+  description?: string;
+  amount: number;
+  customerPhone: string;
+  customerName?: string;
+  interval: RecurringInterval | string;
+  dayOfWeek?: number;
+  dayOfMonth?: number;
+  time?: string;
+  status: RecurringPlanStatus | string;
+  maxCharges?: number;
+  chargeCount: number;
+  nextRunAt?: string;
+  lastChargeAt?: string;
+  createdAt: string;
+}
+
+export interface PayoutAccount {
+  id: string;
+  merchantId: string;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  branch?: string;
+  isDefault?: boolean;
+  status: ActiveStatus | string;
+  createdAt?: string;
+}
+
+export interface MerchantPreferences {
+  settlementPreferredTime?: string;
+  alertLargeOrderThreshold?: number;
+  alertDailySurgeThreshold?: number;
+  webhookUrl?: string;
+}
+
+export interface DiscountCode {
+  id: string;
+  merchantId: string;
+  code: string;
+  type: DiscountType | string;
+  value: number;
+  minSpend?: number;
+  maxUses?: number;
+  usedCount: number;
+  validFrom?: string;
+  validTo?: string;
+  status: ActiveStatus | string;
+  createdAt: string;
+}
+
+export interface CashbackCampaign {
+  id: string;
+  merchantId: string;
+  name: string;
+  percent: number;
+  budget?: number;
+  spent?: number;
+  startsAt?: string;
+  endsAt?: string;
+  status: ActiveStatus | string;
+  createdAt?: string;
+}
+
+export interface Product {
+  id: string;
+  merchantId: string;
+  name: string;
+  price: number;
+  description?: string;
+  category?: string;
+  imageUrl?: string;
+  status: ActiveStatus | string;
+  createdAt?: string;
+}
+
+export interface CustomerInsight {
+  walletId: string;
+  totalSpend: number;
+  transactionCount: number;
+  lastPurchaseAt?: string;
+  tier?: string;
+  loyaltyPoints?: number;
+}
+
+export interface MerchantReview {
+  id: string;
+  merchantId: string;
+  customerName?: string;
+  customerPhone?: string;
+  rating: number;
+  comment?: string;
+  status: ReviewStatus | string;
+  adminReply?: string;
+  createdAt: string;
+}
+
+export interface LoyaltySettings {
+  enabled: boolean;
+  pointsPerMmk: number;
+  rewardThresholdPoints: number;
+  rewardValue: number;
+}
+
+export interface ReferralProgram {
+  id: string;
+  merchantId: string;
+  code: string;
+  referralBonus: number;
+  referredBonus: number;
+  uses: number;
+  status: ActiveStatus | string;
+  createdAt?: string;
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  keyPreview?: string;
+  status: ActiveStatus | string;
+  lastUsedAt?: string;
+  createdAt?: string;
+}
+
+export interface ReportTemplate {
+  id: string;
+  merchantId: string;
+  name: string;
+  reportType: string;
+  frequency: string;
+  format: string;
+  email?: string;
+  enabled: boolean;
+  createdAt?: string;
+}
+
+export interface MerchantAuditLogEntry {
+  id: string;
+  actorType?: string;
+  actorName?: string;
+  staffId?: string;
+  action: string;
+  entity: string;
+  entityId?: string;
+  details?: string;
+  createdAt: string;
+}
+
+export interface AnalyticsCustomer {
+  walletId: string;
+  amount: number;
+  count: number;
+  lastPurchaseAt?: string;
+}
+
+export interface StorePerformance {
+  storeId: string;
+  amount: number;
+  count: number;
+}

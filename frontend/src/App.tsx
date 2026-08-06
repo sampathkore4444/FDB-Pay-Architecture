@@ -26,6 +26,18 @@ import { BusinessDashboardPage } from './pages/merchant/BusinessDashboardPage';
 import { PaymentLinkPayPage } from './pages/payments/PaymentLinkPayPage';
 import { InvoicesPage } from './pages/merchant/InvoicesPage';
 import { InventoryPage } from './pages/merchant/InventoryPage';
+import { RecurringBillingPage } from './pages/merchant/RecurringBillingPage';
+import { PayoutPage } from './pages/merchant/PayoutPage';
+import { CouponsPage } from './pages/merchant/CouponsPage';
+import { CampaignsPage } from './pages/merchant/CampaignsPage';
+import { ProductsPage } from './pages/merchant/ProductsPage';
+import { CustomersPage } from './pages/merchant/CustomersPage';
+import { LoyaltyPage } from './pages/merchant/LoyaltyPage';
+import { ReferralPage } from './pages/merchant/ReferralPage';
+import { MerchantAuditLogPage } from './pages/merchant/AuditLogPage';
+import { DeveloperPage } from './pages/merchant/DeveloperPage';
+import { StoreComparePage } from './pages/merchant/StoreComparePage';
+import { MerchantSettingsPage } from './pages/merchant/MerchantSettingsPage';
 import { AgentPage } from './pages/agent/AgentPage';
 import { AdminPage } from './pages/admin/AdminPage';
 import { KycReviewPage } from './pages/admin/KycReviewPage';
@@ -98,6 +110,18 @@ function App() {
             <Route path="/inventory" element={<RoleGuard allowedRoles={MERCHANT}><InventoryPage /></RoleGuard>} />
             <Route path="/staff" element={<RoleGuard allowedRoles={MERCHANT}><StaffManagementPage /></RoleGuard>} />
             <Route path="/settlements" element={<RoleGuard allowedRoles={MERCHANT}><SettlementsPage /></RoleGuard>} />
+            <Route path="/merchant/recurring" element={<RoleGuard allowedRoles={MERCHANT}><RecurringBillingPage /></RoleGuard>} />
+            <Route path="/merchant/payout" element={<RoleGuard allowedRoles={MERCHANT}><PayoutPage /></RoleGuard>} />
+            <Route path="/merchant/settings" element={<RoleGuard allowedRoles={MERCHANT}><MerchantSettingsPage /></RoleGuard>} />
+            <Route path="/merchant/store-compare" element={<RoleGuard allowedRoles={MERCHANT}><StoreComparePage /></RoleGuard>} />
+            <Route path="/merchant/products" element={<RoleGuard allowedRoles={MERCHANT}><ProductsPage /></RoleGuard>} />
+            <Route path="/merchant/coupons" element={<RoleGuard allowedRoles={MERCHANT}><CouponsPage /></RoleGuard>} />
+            <Route path="/merchant/campaigns" element={<RoleGuard allowedRoles={MERCHANT}><CampaignsPage /></RoleGuard>} />
+            <Route path="/merchant/loyalty" element={<RoleGuard allowedRoles={MERCHANT}><LoyaltyPage /></RoleGuard>} />
+            <Route path="/merchant/referral" element={<RoleGuard allowedRoles={MERCHANT}><ReferralPage /></RoleGuard>} />
+            <Route path="/merchant/customers" element={<RoleGuard allowedRoles={MERCHANT}><CustomersPage /></RoleGuard>} />
+            <Route path="/merchant/audit-log" element={<RoleGuard allowedRoles={MERCHANT}><MerchantAuditLogPage /></RoleGuard>} />
+            <Route path="/merchant/developer" element={<RoleGuard allowedRoles={MERCHANT}><DeveloperPage /></RoleGuard>} />
 
             {/* Agent pages */}
             <Route path="/agent" element={<RoleGuard allowedRoles={AGENT}><AgentPage /></RoleGuard>} />
