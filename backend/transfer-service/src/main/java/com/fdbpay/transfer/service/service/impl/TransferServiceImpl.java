@@ -356,6 +356,47 @@ public class TransferServiceImpl implements TransferService {
 
     @Override
     @Transactional
+    public BulkOperationResponse batchCharge(UUID merchantUserId, List<ChargeRequest> requests) {
+        List<BulkOperationResult> results = new ArrayList<>();
+        int successCount = 0;
+        int index = 0;
+        for (ChargeRequest request : requests) {
+            index++;
+            try {
+                ChargeRequest copy = request.getIdempotencyKey() != null && !request.getIdempotencyKey().isBlank()
+                        ? request
+                        : ChargeRequest.builder()
+                                .customerPhone(request.getCustomerPhone())
+                                .customerName(request.getCustomerName())
+                                .cardLast4(request.getCardLast4())
+                                .amount(request.getAmount())
+                                .tipAmount(request.getTipAmount())
+                                .taxAmount(request.getTaxAmount())
+                                .description(request.getDescription())
+                                .staffId(request.getStaffId())
+                                .staffName(request.getStaffName())
+                                .storeId(request.getStoreId())
+                                .discountCode(request.getDiscountCode())
+                                .idempotencyKey("batch_" + merchantUserId + "_" + System.currentTimeMillis() + "_" + index)
+                                .build();
+                TransactionResponse response = charge(merchantUserId, copy);
+                successCount++;
+                results.add(BulkOperationResult.builder()
+                        .transactionId(response.getId()).success(true).message("Charged").build());
+            } catch (Exception e) {
+                results.add(BulkOperationResult.builder()
+                        .transactionId(null).success(false).message(e.getMessage()).build());
+            }
+        }
+        return BulkOperationResponse.builder()
+                .successCount(successCount)
+                .failedCount(results.size() - successCount)
+                .results(results)
+                .build();
+    }
+
+    @Override
+    @Transactional
     public BulkOperationResponse bulkRefund(UUID merchantUserId, BulkRefundRequest request) {
         checkIdempotency(request.getIdempotencyKey());
 
@@ -385,20 +426,28 @@ public class TransferServiceImpl implements TransferService {
                 continue;
             }
 
+            long refundAmount = request.getAmount() == null ? original.getAmount() : Math.min(request.getAmount(), original.getAmount());
+            if (refundAmount <= 0) {
+                results.add(BulkOperationResult.builder().transactionId(txnId).success(false)
+                        .message("Refund amount must be positive").build());
+                continue;
+            }
+
             Transaction refund = Transaction.builder()
                     .idempotencyKey(refundKey)
                     .type(TransactionType.REFUND)
                     .status(TransactionStatus.PENDING)
                     .senderWalletId(merchantWalletId)
                     .receiverWalletId(original.getSenderWalletId())
-                    .amount(original.getAmount())
+                    .amount(refundAmount)
                     .currency("MMK")
                     .description(request.getReason() != null ? request.getReason() : "Refund")
                     .metadata("{\"method\":\"REFUND\",\"reason\":\"" + safe(request.getReason())
                             + "\",\"reasonCode\":\"" + safe(request.getReasonCode() == null ? null : request.getReasonCode().name())
                             + "\",\"note\":\"" + safe(request.getNote())
                             + "\",\"staffId\":\"" + safeId(request.getStaffId())
-                            + "\",\"staffName\":\"" + safe(request.getStaffName()) + "\"}")
+                            + "\",\"staffName\":\"" + safe(request.getStaffName())
+                            + "\",\"partial\":\"" + (refundAmount < original.getAmount()) + "\"}")
                     .parentTransactionId(txnId)
                     .createdAt(OffsetDateTime.now())
                     .build();
@@ -406,9 +455,11 @@ public class TransferServiceImpl implements TransferService {
 
             try {
                 Transaction completed = executeWalletMovement(refund, "Refund");
-                original.setStatus(TransactionStatus.REVERSED);
-                original.setFailureReason("Refunded by merchant");
-                transactionRepository.save(original);
+                if (refundAmount >= original.getAmount()) {
+                    original.setStatus(TransactionStatus.REVERSED);
+                    original.setFailureReason("Refunded by merchant");
+                    transactionRepository.save(original);
+                }
                 publishEvent(completed, "COMPLETED", merchantUserId, null);
                 successCount++;
                 results.add(BulkOperationResult.builder().transactionId(txnId).success(true).message("Refunded").build());
@@ -548,7 +599,14 @@ public class TransferServiceImpl implements TransferService {
                 + "\",\"cardLast4\":\"" + safe(request.getCardLast4())
                 + "\",\"staffId\":\"" + safeId(request.getStaffId())
                 + "\",\"staffName\":\"" + safe(request.getStaffName())
-                + "\",\"storeId\":\"" + safeId(request.getStoreId()) + "\"}";
+                + "\",\"storeId\":\"" + safeId(request.getStoreId())
+                + "\",\"tipAmount\":\"" + safeLong(request.getTipAmount())
+                + "\",\"taxAmount\":\"" + safeLong(request.getTaxAmount())
+                + "\",\"discountCode\":\"" + safe(request.getDiscountCode()) + "\"}";
+    }
+
+    private String safeLong(Long value) {
+        return value == null ? "" : String.valueOf(value);
     }
 
     private TransactionResponse mapToResponse(Transaction transaction) {

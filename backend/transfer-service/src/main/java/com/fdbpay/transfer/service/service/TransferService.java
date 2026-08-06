@@ -10,6 +10,7 @@ import com.fdbpay.transfer.service.dto.response.analytics.MerchantStatement;
 import org.springframework.data.domain.Page;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public interface TransferService {
@@ -25,6 +26,8 @@ public interface TransferService {
     Page<TransactionResponse> getHistory(UUID userId, int page, int size);
 
     TransactionResponse charge(UUID merchantUserId, ChargeRequest request);
+
+    BulkOperationResponse batchCharge(UUID merchantUserId, List<ChargeRequest> requests);
 
     BulkOperationResponse bulkRefund(UUID merchantUserId, BulkRefundRequest request);
 

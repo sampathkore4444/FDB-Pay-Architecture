@@ -3,8 +3,10 @@ package com.fdbpay.transfer.service.service.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fdbpay.transfer.service.dto.response.analytics.AnalyticsTransactionRow;
+import com.fdbpay.transfer.service.dto.response.analytics.CustomerInsight;
 import com.fdbpay.transfer.service.dto.response.analytics.MerchantAnalyticsBenchmark;
 import com.fdbpay.transfer.service.dto.response.analytics.MerchantAnalyticsSummary;
+import com.fdbpay.transfer.service.dto.response.analytics.StorePerformance;
 import com.fdbpay.transfer.service.model.Transaction;
 import com.fdbpay.transfer.service.model.enums.TransactionStatus;
 import com.fdbpay.transfer.service.repository.TransactionRepository;
@@ -158,6 +160,60 @@ public class MerchantAnalyticsServiceImpl implements MerchantAnalyticsService {
         int to = Math.min(from + size, total);
         List<AnalyticsTransactionRow> content = filtered.isEmpty() ? List.of() : filtered.subList(from, to);
         return new PageImpl<>(content, PageRequest.of(page, size), total);
+    }
+
+    @Override
+    public List<CustomerInsight> getCustomers(UUID walletId) {
+        DateRange range = resolveRange(null, null);
+        List<Transaction> incoming = transactionRepository
+                .findByReceiverWalletIdAndStatusAndCreatedAtBetweenOrderByCreatedAtDesc(
+                        walletId, TransactionStatus.COMPLETED, range.from, range.to);
+
+        Map<String, CustomerInsight> byCustomer = new LinkedHashMap<>();
+        for (Transaction tx : incoming) {
+            String wallet = String.valueOf(tx.getSenderWalletId());
+            CustomerInsight insight = byCustomer.computeIfAbsent(wallet, w -> CustomerInsight.builder()
+                    .walletId(w).count(0).amount(0L).build());
+            insight.setCount(insight.getCount() + 1);
+            insight.setAmount(insight.getAmount() + tx.getAmount());
+            if (insight.getLastPurchaseAt() == null || tx.getCreatedAt().isAfter(insight.getLastPurchaseAt())) {
+                insight.setLastPurchaseAt(tx.getCreatedAt());
+            }
+        }
+        return byCustomer.values().stream()
+                .sorted(Comparator.comparingLong(CustomerInsight::getAmount).reversed())
+                .toList();
+    }
+
+    @Override
+    public List<StorePerformance> getStorePerformance(UUID walletId) {
+        DateRange range = resolveRange(null, null);
+        List<Transaction> incoming = transactionRepository
+                .findByReceiverWalletIdAndStatusAndCreatedAtBetweenOrderByCreatedAtDesc(
+                        walletId, TransactionStatus.COMPLETED, range.from, range.to);
+
+        Map<String, StorePerformance> byStore = new LinkedHashMap<>();
+        for (Transaction tx : incoming) {
+            String storeId = extractMetadataString(tx, "storeId");
+            if (storeId == null || storeId.isBlank()) {
+                storeId = "UNASSIGNED";
+            }
+            StorePerformance perf = byStore.computeIfAbsent(storeId, s -> StorePerformance.builder()
+                    .storeId(s).count(0).amount(0L).build());
+            perf.setCount(perf.getCount() + 1);
+            perf.setAmount(perf.getAmount() + tx.getAmount());
+        }
+        return byStore.values().stream()
+                .sorted(Comparator.comparingLong(StorePerformance::getAmount).reversed())
+                .toList();
+    }
+
+    private String extractMetadataString(Transaction tx, String key) {
+        JsonNode node = parseMetadata(tx);
+        if (node != null && node.hasNonNull(key)) {
+            return node.get(key).asText();
+        }
+        return null;
     }
 
     private AnalyticsTransactionRow toRow(Transaction tx, String direction) {

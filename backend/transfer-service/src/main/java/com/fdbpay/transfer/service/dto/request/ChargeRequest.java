@@ -26,6 +26,10 @@ public class ChargeRequest {
     @Positive(message = "Amount must be positive")
     private Long amount;
 
+    private Long tipAmount;
+
+    private Long taxAmount;
+
     private String description;
 
     private UUID staffId;
@@ -33,6 +37,8 @@ public class ChargeRequest {
     private String staffName;
 
     private UUID storeId;
+
+    private String discountCode;
 
     @NotBlank(message = "Idempotency key is required")
     private String idempotencyKey;

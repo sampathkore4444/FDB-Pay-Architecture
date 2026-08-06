@@ -2,8 +2,10 @@ package com.fdbpay.transfer.service.controller;
 
 import com.fdbpay.shared.dto.ApiResponse;
 import com.fdbpay.transfer.service.dto.response.analytics.AnalyticsTransactionRow;
+import com.fdbpay.transfer.service.dto.response.analytics.CustomerInsight;
 import com.fdbpay.transfer.service.dto.response.analytics.MerchantAnalyticsBenchmark;
 import com.fdbpay.transfer.service.dto.response.analytics.MerchantAnalyticsSummary;
+import com.fdbpay.transfer.service.dto.response.analytics.StorePerformance;
 import com.fdbpay.transfer.service.service.MerchantAnalyticsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -11,6 +13,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -51,5 +54,15 @@ public class MerchantAnalyticsController {
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.success(merchantAnalyticsService.getTransactions(
                 walletId, startDate, endDate, direction, minAmount, maxAmount, method, terminalId, staffId, page, size));
+    }
+
+    @GetMapping("/customers")
+    public ApiResponse<List<CustomerInsight>> getCustomers(@RequestParam UUID walletId) {
+        return ApiResponse.success(merchantAnalyticsService.getCustomers(walletId));
+    }
+
+    @GetMapping("/byStore")
+    public ApiResponse<List<StorePerformance>> getStorePerformance(@RequestParam UUID walletId) {
+        return ApiResponse.success(merchantAnalyticsService.getStorePerformance(walletId));
     }
 }

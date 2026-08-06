@@ -20,6 +20,8 @@ public class BulkRefundRequest {
     @NotEmpty(message = "At least one transaction id is required")
     private List<UUID> transactionIds;
 
+    private Long amount;
+
     private String reason;
 
     private RefundReason reasonCode;

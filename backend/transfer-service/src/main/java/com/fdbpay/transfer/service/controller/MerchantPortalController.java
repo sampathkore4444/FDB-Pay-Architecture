@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -30,6 +31,13 @@ public class MerchantPortalController {
             @RequestParam UUID merchantUserId,
             @Valid @RequestBody ChargeRequest request) {
         return ApiResponse.success(transferService.charge(merchantUserId, request));
+    }
+
+    @PostMapping("/batch-charge")
+    public ApiResponse<BulkOperationResponse> batchCharge(
+            @RequestParam UUID merchantUserId,
+            @Valid @RequestBody List<ChargeRequest> requests) {
+        return ApiResponse.success(transferService.batchCharge(merchantUserId, requests));
     }
 
     @PostMapping("/refunds")

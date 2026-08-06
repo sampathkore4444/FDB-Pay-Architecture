@@ -1,7 +1,9 @@
 package com.fdbpay.merchant.service.service.impl;
 
 import com.fdbpay.merchant.service.client.TransferAnalyticsClient;
+import com.fdbpay.merchant.service.client.TransferServiceClient;
 import com.fdbpay.merchant.service.dto.response.RiskAlertResponse;
+import com.fdbpay.merchant.service.model.Merchant;
 import com.fdbpay.merchant.service.model.RiskAlert;
 import com.fdbpay.merchant.service.model.enums.RiskAlertStatus;
 import com.fdbpay.merchant.service.model.enums.RiskSeverity;
@@ -28,21 +30,22 @@ import java.util.UUID;
 public class RiskAlertServiceImpl implements RiskAlertService {
 
     private static final double SURGE_THRESHOLD = 2.0;
-    private static final long MIN_SURGE_VOLUME = 100_000L;
     private static final long HIGH_DAILY_VOLUME = 5_000_000L;
 
     private final RiskAlertRepository alertRepository;
     private final MerchantRepository merchantRepository;
     private final TransferAnalyticsClient analyticsClient;
+    private final TransferServiceClient transferServiceClient;
 
     @Override
     @Transactional
     public List<RiskAlertResponse> getAlerts(UUID merchantId, UUID walletId) {
-        merchantRepository.findById(merchantId)
+        Merchant merchant = merchantRepository.findById(merchantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Merchant", merchantId.toString()));
 
-        detectSurge(merchantId, walletId);
+        detectSurge(merchantId, walletId, merchant.getAlertDailySurgeThreshold());
         detectHighVolume(merchantId, walletId);
+        detectLargeOrder(merchantId, walletId, merchant.getAlertLargeOrderThreshold());
 
         return alertRepository.findByMerchantIdOrderByCreatedAtDesc(merchantId)
                 .stream()
@@ -64,17 +67,43 @@ public class RiskAlertServiceImpl implements RiskAlertService {
         return mapToResponse(alert);
     }
 
-    private void detectSurge(UUID merchantId, UUID walletId) {
+    private void detectSurge(UUID merchantId, UUID walletId, long minVolume) {
         LocalDate today = LocalDate.now();
         long todayVolume = volumeFor(analyticsClient.getSummary(walletId, today, today));
         long priorWeekVolume = volumeFor(analyticsClient.getSummary(walletId, today.minusDays(7), today.minusDays(1)));
         long dailyAvg = priorWeekVolume / 7;
 
-        if (todayVolume >= MIN_SURGE_VOLUME && dailyAvg > 0 && todayVolume > dailyAvg * SURGE_THRESHOLD) {
+        if (todayVolume >= minVolume && dailyAvg > 0 && todayVolume > dailyAvg * SURGE_THRESHOLD) {
             createIfOpen(merchantId, "SURGE", RiskSeverity.HIGH,
                     "Unusual transaction surge",
                     "Today's volume (" + todayVolume + " MMK) is " + Math.round((double) todayVolume / dailyAvg * 10) / 10.0
                             + "x your 7-day average (" + dailyAvg + " MMK). This may indicate fraud or duplicate activity.");
+        }
+    }
+
+    private void detectLargeOrder(UUID merchantId, UUID walletId, Long threshold) {
+        if (threshold == null || threshold <= 0) {
+            return;
+        }
+        LocalDate today = LocalDate.now();
+        long maxAmount = 0L;
+        for (Map<String, Object> row : transferServiceClient.getTransactions(walletId, 200)) {
+            Object dir = row.get("direction");
+            if (dir != null && "SALE".equalsIgnoreCase(String.valueOf(dir))) {
+                try {
+                    long amount = ((Number) row.get("amount")).longValue();
+                    if (amount > maxAmount) {
+                        maxAmount = amount;
+                    }
+                } catch (Exception e) {
+                    // ignore malformed rows
+                }
+            }
+        }
+        if (maxAmount >= threshold) {
+            createIfOpen(merchantId, "LARGE_ORDER", RiskSeverity.MEDIUM,
+                    "Large order detected",
+                    "A single order of " + maxAmount + " MMK exceeded your alert threshold of " + threshold + " MMK. Review the transaction to confirm it is legitimate.");
         }
     }
 

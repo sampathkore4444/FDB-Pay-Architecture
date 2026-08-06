@@ -81,6 +81,20 @@ public class Merchant {
     @Column(columnDefinition = "jsonb")
     private String terminalFields;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private Long alertLargeOrderThreshold = 500000L;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Long alertDailySurgeThreshold = 100000L;
+
+    @Builder.Default
+    @Column(nullable = false, length = 5)
+    private String settlementPreferredTime = "16:00";
+
+    private String webhookUrl;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

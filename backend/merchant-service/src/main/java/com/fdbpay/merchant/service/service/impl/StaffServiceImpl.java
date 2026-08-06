@@ -9,6 +9,7 @@ import com.fdbpay.merchant.service.model.enums.StaffAccountStatus;
 import com.fdbpay.merchant.service.model.enums.StaffRole;
 import com.fdbpay.merchant.service.repository.MerchantRepository;
 import com.fdbpay.merchant.service.repository.StaffAccountRepository;
+import com.fdbpay.merchant.service.service.AuditService;
 import com.fdbpay.merchant.service.service.StaffService;
 import com.fdbpay.shared.constants.ErrorCodes;
 import com.fdbpay.shared.exceptions.BusinessException;
@@ -32,6 +33,7 @@ public class StaffServiceImpl implements StaffService {
     private final StaffAccountRepository staffAccountRepository;
     private final MerchantRepository merchantRepository;
     private final AuthServiceClient authServiceClient;
+    private final AuditService auditService;
 
     private static final Map<StaffRole, List<String>> DEFAULT_PERMISSIONS = Map.of(
             StaffRole.OWNER, List.of("terminal", "refunds", "reports", "links", "settlements", "staff"),
@@ -67,6 +69,8 @@ public class StaffServiceImpl implements StaffService {
         staff = staffAccountRepository.save(staff);
         log.info("Staff added: staffId={}, merchantId={}, userId={}, role={}",
                 staff.getId(), merchantId, request.getUserId(), request.getRole());
+        auditService.log(merchantId, "OWNER", null, null, "ADD_STAFF", "STAFF", staff.getId().toString(),
+                "Added staff user with role " + request.getRole());
 
         return mapToResponse(staff);
     }
@@ -88,6 +92,8 @@ public class StaffServiceImpl implements StaffService {
         staff.setStatus(StaffAccountStatus.INACTIVE);
         staffAccountRepository.save(staff);
         log.info("Staff removed: staffId={}, merchantId={}", staffId, merchantId);
+        auditService.log(merchantId, "OWNER", null, staff.getId(), "REMOVE_STAFF", "STAFF", staffId.toString(),
+                "Deactivated staff member");
     }
 
     @Override
@@ -116,6 +122,8 @@ public class StaffServiceImpl implements StaffService {
                 ? parsePermissions(staff.getPermissions()) : null));
         staff = staffAccountRepository.save(staff);
         log.info("Staff role updated: staffId={}, newRole={}", staffId, role);
+        auditService.log(merchantId, "OWNER", null, staff.getId(), "CHANGE_ROLE", "STAFF", staffId.toString(),
+                "Staff role -> " + role);
 
         return mapToResponse(staff);
     }
@@ -133,6 +141,8 @@ public class StaffServiceImpl implements StaffService {
         staff.setPermissions(String.join(",", permissions));
         staff = staffAccountRepository.save(staff);
         log.info("Staff permissions updated: staffId={}", staffId);
+        auditService.log(merchantId, "OWNER", null, staff.getId(), "UPDATE_PERMISSIONS", "STAFF", staffId.toString(),
+                "Staff permissions -> " + String.join(",", permissions));
         return mapToResponse(staff);
     }
 
