@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
-import { merchantApi, merchantOpsApi } from '../../services/api';
+import { merchantApi, merchantOpsApi, discountApi } from '../../services/api';
 import { Card } from '../../components/cards/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -16,7 +16,7 @@ const DEFAULT_FIELDS: TerminalFieldOption[] = [
   { key: 'description', label: 'Description', enabled: true, required: false },
 ];
 
-const emptyForm = { customerPhone: '', customerName: '', cardLast4: '', amount: '', description: '' };
+const emptyForm = { customerPhone: '', customerName: '', cardLast4: '', amount: '', tipAmount: '', taxPercent: '', discountCode: '', description: '' };
 
 export function VirtualTerminalPage() {
   const { t } = useTranslation();
@@ -27,6 +27,8 @@ export function VirtualTerminalPage() {
   const [submitting, setSubmitting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [validating, setValidating] = useState(false);
+  const [discountApplied, setDiscountApplied] = useState<{ code: string; value: number; type: string } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -58,11 +60,15 @@ export function VirtualTerminalPage() {
         customerName: form.customerName.trim() || undefined,
         cardLast4: form.cardLast4,
         amount: Number(form.amount),
+        tipAmount: form.tipAmount ? Number(form.tipAmount) : undefined,
+        taxAmount: form.taxPercent ? Math.round((Number(form.amount) * Number(form.taxPercent)) / 100) : undefined,
+        discountCode: discountApplied?.code,
         description: form.description.trim() || undefined,
       });
       setResult(res);
       toast.success(t.virtualTerminal.chargeSuccess);
-      setForm((f) => ({ ...f, amount: '', description: '' }));
+      setForm((f) => ({ ...f, amount: '', tipAmount: '', taxPercent: '', discountCode: '', description: '' }));
+      setDiscountApplied(null);
     } catch (err) {
       console.error('Charge failed', err);
       toast.error(t.virtualTerminal.chargeFailed);
@@ -70,6 +76,34 @@ export function VirtualTerminalPage() {
       setSubmitting(false);
     }
   };
+
+  const handleValidateCode = async () => {
+    if (!user || !form.discountCode.trim()) return;
+    setValidating(true);
+    try {
+      const code = await discountApi.validate(user.id, form.discountCode.trim(), Number(form.amount) || undefined);
+      setDiscountApplied({ code: code.code, value: code.value, type: code.type });
+      toast.success(t.virtualTerminal.codeValid);
+    } catch (err) {
+      console.error('Code validation failed', err);
+      setDiscountApplied(null);
+      toast.error(t.virtualTerminal.codeInvalid);
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const totals = useMemo(() => {
+    const subtotal = Number(form.amount) || 0;
+    const tip = Number(form.tipAmount) || 0;
+    const tax = form.taxPercent ? Math.round((subtotal * Number(form.taxPercent)) / 100) : 0;
+    let discount = 0;
+    if (discountApplied) {
+      discount = discountApplied.type === 'PERCENT' ? Math.round((subtotal * discountApplied.value) / 100) : discountApplied.value;
+      if (discount > subtotal) discount = subtotal;
+    }
+    return { subtotal, tip, tax, discount, total: Math.max(0, subtotal + tip + tax - discount) };
+  }, [form.amount, form.tipAmount, form.taxPercent, discountApplied]);
 
   const toggleField = (key: string, patch: Partial<TerminalFieldOption>) =>
     setFields((fs) => fs.map((f) => (f.key === key ? { ...f, ...patch } : f)));
@@ -111,7 +145,22 @@ export function VirtualTerminalPage() {
           {isVisible('description') && (
             <Input label={t.virtualTerminal.description} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
           )}
-          <Input type="number" label={t.virtualTerminal.amount} value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
+          <Input type="number" label={t.virtualTerminal.amount} value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value, discountCode: discountApplied ? '' : f.discountCode }))} />
+          <Input type="number" label={t.virtualTerminal.tip} value={form.tipAmount} onChange={(e) => setForm((f) => ({ ...f, tipAmount: e.target.value }))} />
+          <Input type="number" label={t.virtualTerminal.tax} value={form.taxPercent} onChange={(e) => setForm((f) => ({ ...f, taxPercent: e.target.value }))} />
+        </div>
+        <div className="mt-4 flex items-end gap-2">
+          <Input label={t.virtualTerminal.discountCode} value={form.discountCode} onChange={(e) => setForm((f) => ({ ...f, discountCode: e.target.value }))} />
+          <Button variant="secondary" onClick={handleValidateCode} loading={validating} disabled={!form.discountCode.trim()}>
+            {t.virtualTerminal.validateCode}
+          </Button>
+        </div>
+        <div className="mt-4 bg-gray-50 rounded-lg px-4 py-3 text-sm text-gray-700 space-y-1">
+          <div className="flex justify-between"><span>{t.virtualTerminal.subtotal}</span><span>{formatCurrency(totals.subtotal)}</span></div>
+          {totals.tip > 0 && <div className="flex justify-between"><span>Tip</span><span>{formatCurrency(totals.tip)}</span></div>}
+          {totals.tax > 0 && <div className="flex justify-between"><span>Tax</span><span>{formatCurrency(totals.tax)}</span></div>}
+          {totals.discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-{formatCurrency(totals.discount)}</span></div>}
+          <div className="flex justify-between font-semibold text-gray-900 border-t border-gray-200 pt-1"><span>{t.virtualTerminal.grandTotal}</span><span>{formatCurrency(totals.total)}</span></div>
         </div>
         <div className="mt-4 flex items-center justify-between">
           {result ? (
