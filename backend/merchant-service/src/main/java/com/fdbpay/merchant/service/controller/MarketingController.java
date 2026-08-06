@@ -1,12 +1,15 @@
 package com.fdbpay.merchant.service.controller;
 
+import com.fdbpay.merchant.service.dto.request.AbTestRequest;
 import com.fdbpay.merchant.service.dto.request.CashbackCampaignRequest;
 import com.fdbpay.merchant.service.dto.request.DiscountCodeRequest;
 import com.fdbpay.merchant.service.dto.request.LoyaltySettingsRequest;
+import com.fdbpay.merchant.service.dto.request.MarketingCampaignRequest;
 import com.fdbpay.merchant.service.dto.request.ReferralProgramRequest;
 import com.fdbpay.merchant.service.dto.response.CashbackCampaignResponse;
 import com.fdbpay.merchant.service.dto.response.DiscountCodeResponse;
 import com.fdbpay.merchant.service.dto.response.LoyaltySettingsResponse;
+import com.fdbpay.merchant.service.dto.response.MarketingCampaignResponse;
 import com.fdbpay.merchant.service.dto.response.ReferralProgramResponse;
 import com.fdbpay.merchant.service.service.MarketingService;
 import com.fdbpay.shared.dto.ApiResponse;
@@ -55,6 +58,34 @@ public class MarketingController {
             @RequestParam String code,
             @RequestParam(required = false) Long amount) {
         return ApiResponse.success(marketingService.validateDiscountCode(accessHelper.resolveMerchantId(userId), code, amount));
+    }
+
+    @PostMapping("/discount-codes/ab-test")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<List<DiscountCodeResponse>> createAbTest(@RequestParam UUID userId, @Valid @RequestBody AbTestRequest request) {
+        return ApiResponse.success(marketingService.createAbTest(accessHelper.resolveMerchantId(userId), request));
+    }
+
+    @GetMapping("/marketing-campaigns")
+    public ApiResponse<List<MarketingCampaignResponse>> listMarketingCampaigns(@RequestParam UUID userId) {
+        return ApiResponse.success(marketingService.listMarketingCampaigns(accessHelper.resolveMerchantId(userId)));
+    }
+
+    @PostMapping("/marketing-campaigns")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<MarketingCampaignResponse> createMarketingCampaign(@RequestParam UUID userId, @Valid @RequestBody MarketingCampaignRequest request) {
+        return ApiResponse.success(marketingService.createMarketingCampaign(accessHelper.resolveMerchantId(userId), request));
+    }
+
+    @PutMapping("/marketing-campaigns/{campaignId}/toggle")
+    public ApiResponse<MarketingCampaignResponse> toggleMarketingCampaign(@RequestParam UUID userId, @PathVariable UUID campaignId) {
+        return ApiResponse.success(marketingService.toggleMarketingCampaign(accessHelper.resolveMerchantId(userId), campaignId));
+    }
+
+    @DeleteMapping("/marketing-campaigns/{campaignId}")
+    public ApiResponse<Void> deleteMarketingCampaign(@RequestParam UUID userId, @PathVariable UUID campaignId) {
+        marketingService.deleteMarketingCampaign(accessHelper.resolveMerchantId(userId), campaignId);
+        return ApiResponse.success(null);
     }
 
     @GetMapping("/cashback-campaigns")

@@ -79,6 +79,33 @@ public class PaymentLinkServiceImpl implements PaymentLinkService {
     }
 
     @Override
+    @Transactional
+    public PaymentLinkResponse resendReminder(UUID merchantId, UUID linkId) {
+        PaymentLink link = paymentLinkRepository.findById(linkId)
+                .orElseThrow(() -> new ResourceNotFoundException("PaymentLink", linkId.toString()));
+        if (!link.getMerchantId().equals(merchantId)) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Payment link does not belong to this merchant");
+        }
+        if (link.getStatus() == PaymentLinkStatus.PAID) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Payment link already paid");
+        }
+        if (link.getStatus() != PaymentLinkStatus.ACTIVE) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Payment link is not active");
+        }
+        if (link.getCustomerPhone() == null || link.getCustomerPhone().isBlank()) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "No customer phone set on this link");
+        }
+        link.setReminderCount(link.getReminderCount() + 1);
+        if (link.getExpiresAt() != null && link.getExpiresAt().isBefore(OffsetDateTime.now())) {
+            link.setExpiresAt(OffsetDateTime.now().plusDays(3));
+            log.info("Payment link reactivated after expiry: linkId={}", linkId);
+        }
+        link = paymentLinkRepository.save(link);
+        log.info("Payment link reminder sent: linkId={}, reminderCount={}, phone={}", linkId, link.getReminderCount(), link.getCustomerPhone());
+        return mapToResponse(link);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public PaymentLinkPublicResponse getByToken(String token) {
         PaymentLink link = paymentLinkRepository.findByToken(token)
@@ -136,6 +163,7 @@ public class PaymentLinkServiceImpl implements PaymentLinkService {
                 .customerName(link.getCustomerName())
                 .status(link.getStatus())
                 .singleUse(link.isSingleUse())
+                .reminderCount(link.getReminderCount())
                 .paidAt(link.getPaidAt())
                 .expiresAt(link.getExpiresAt())
                 .createdAt(link.getCreatedAt())

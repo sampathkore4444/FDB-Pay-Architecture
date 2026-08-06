@@ -41,6 +41,14 @@ public class Product {
     @Column(length = 255)
     private String imageUrl;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private Long quantity = 0L;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Long lowStockThreshold = 0L;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ActiveStatus status;

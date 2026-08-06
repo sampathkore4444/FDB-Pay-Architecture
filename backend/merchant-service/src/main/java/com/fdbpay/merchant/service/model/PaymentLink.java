@@ -55,6 +55,10 @@ public class PaymentLink {
 
     private OffsetDateTime expiresAt;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer reminderCount = 0;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

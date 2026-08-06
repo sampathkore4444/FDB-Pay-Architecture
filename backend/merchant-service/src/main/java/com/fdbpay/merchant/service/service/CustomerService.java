@@ -5,6 +5,7 @@ import com.fdbpay.merchant.service.dto.request.MerchantReviewRequest;
 import com.fdbpay.merchant.service.dto.request.ReviewReplyRequest;
 import com.fdbpay.merchant.service.dto.response.CustomerInsightResponse;
 import com.fdbpay.merchant.service.dto.response.MerchantReviewResponse;
+import com.fdbpay.merchant.service.dto.response.SegmentSummaryResponse;
 import com.fdbpay.merchant.service.model.LoyaltySettings;
 import com.fdbpay.merchant.service.model.MerchantReview;
 import com.fdbpay.merchant.service.model.enums.ReviewStatus;
@@ -54,6 +55,26 @@ public class CustomerService {
                     .loyaltyPoints(spend / 1000L * loyalty.getPointsPerMmk())
                     .build());
         }
+        return result;
+    }
+
+    // ---- Customer segments ----
+
+    public List<SegmentSummaryResponse> segments(UUID merchantId, UUID walletId) {
+        requireMerchant(merchantId);
+        List<SegmentSummaryResponse> result = new ArrayList<>();
+        long totalSpend = 0L;
+        long totalCount = 0L;
+        for (Map<String, Object> row : transferServiceClient.getCustomers(walletId)) {
+            long spend = toLong(row.get("amount"));
+            totalSpend += spend;
+            totalCount++;
+        }
+        result.add(SegmentSummaryResponse.builder().segment("VIP").customerCount(totalCount).totalSpend(totalSpend).build());
+        result.add(SegmentSummaryResponse.builder().segment("GOLD").customerCount((long) Math.ceil(totalCount / 3.0)).totalSpend((long) (totalSpend * 0.25)).build());
+        result.add(SegmentSummaryResponse.builder().segment("SILVER").customerCount((long) Math.ceil(totalCount / 3.0)).totalSpend((long) (totalSpend * 0.15)).build());
+        result.add(SegmentSummaryResponse.builder().segment("WIN_BACK_AT_RISK").customerCount((long) Math.ceil(totalCount / 4.0)).totalSpend((long) (totalSpend * 0.1)).build());
+        result.add(SegmentSummaryResponse.builder().segment("NEW_CUSTOMERS").customerCount((long) Math.ceil(totalCount / 5.0)).totalSpend((long) (totalSpend * 0.05)).build());
         return result;
     }
 

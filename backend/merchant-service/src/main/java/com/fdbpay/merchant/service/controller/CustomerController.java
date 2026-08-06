@@ -4,6 +4,7 @@ import com.fdbpay.merchant.service.dto.request.MerchantReviewRequest;
 import com.fdbpay.merchant.service.dto.request.ReviewReplyRequest;
 import com.fdbpay.merchant.service.dto.response.CustomerInsightResponse;
 import com.fdbpay.merchant.service.dto.response.MerchantReviewResponse;
+import com.fdbpay.merchant.service.dto.response.SegmentSummaryResponse;
 import com.fdbpay.merchant.service.service.CustomerService;
 import com.fdbpay.shared.dto.ApiResponse;
 import jakarta.validation.Valid;
@@ -27,6 +28,13 @@ public class CustomerController {
             @RequestParam UUID userId,
             @RequestParam UUID walletId) {
         return ApiResponse.success(customerService.insights(accessHelper.resolveMerchantId(userId), walletId));
+    }
+
+    @GetMapping("/customers/segments")
+    public ApiResponse<List<SegmentSummaryResponse>> segments(
+            @RequestParam UUID userId,
+            @RequestParam UUID walletId) {
+        return ApiResponse.success(customerService.segments(accessHelper.resolveMerchantId(userId), walletId));
     }
 
     @GetMapping("/reviews")

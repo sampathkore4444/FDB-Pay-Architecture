@@ -11,6 +11,7 @@ import type {
   RecurringPlan, PayoutAccount, MerchantPreferences, DiscountCode, CashbackCampaign, Product,
   CustomerInsight, MerchantReview, LoyaltySettings, ReferralProgram, ApiKey, ReportTemplate,
   MerchantAuditLogEntry, AnalyticsCustomer, StorePerformance,
+  Payout, ContractInfo, WebhookSubscription, WebhookDelivery, FraudRule, MarketingCampaign, SegmentSummary,
 } from '../types';
 import { useAuthStore } from '../store/authStore';
 
@@ -131,6 +132,9 @@ export const paymentLinksApi = {
 
   deactivate: (userId: string, id: string) =>
     api.put<ApiResponse<PaymentLink>>(`/merchant/payment-links/${id}/deactivate?userId=${userId}`).then((r) => r.data.data),
+
+  resend: (userId: string, id: string) =>
+    api.post<ApiResponse<PaymentLink>>(`/merchant/payment-links/${id}/resend?userId=${userId}`).then((r) => r.data.data),
 
   getByToken: (token: string) =>
     api.get<ApiResponse<PaymentLinkPublic>>(`/payment-links/token/${token}`).then((r) => r.data.data),
@@ -736,6 +740,69 @@ export const payoutApi = {
 
   updatePreferences: (userId: string, data: Partial<MerchantPreferences>) =>
     api.put<ApiResponse<MerchantPreferences>>(`/merchant/preferences?userId=${userId}`, data).then((r) => r.data.data),
+
+  requestPayout: (userId: string, data: { accountId: string; amount: number }) =>
+    api.post<ApiResponse<Payout>>(`/merchant/payouts?userId=${userId}`, data).then((r) => r.data.data),
+
+  listPayouts: (userId: string, page = 0, size = 20) =>
+    api.get<ApiResponse<{ content: Payout[]; totalElements: number }>>(`/merchant/payouts?userId=${userId}&page=${page}&size=${size}`).then((r) => r.data.data?.content || []),
+
+  availableBalance: (userId: string) =>
+    api.get<ApiResponse<{ balanceAvailable: number }>>(`/merchant/payouts/available-balance?userId=${userId}`).then((r) => r.data.data?.balanceAvailable ?? 0),
+
+  contract: (userId: string) =>
+    api.get<ApiResponse<ContractInfo>>(`/merchant/contract?userId=${userId}`).then((r) => r.data.data),
+};
+
+export const webhookApi = {
+  list: (userId: string) =>
+    api.get<ApiResponse<WebhookSubscription[]>>(`/merchant/developer/webhooks?userId=${userId}`).then((r) => r.data.data || []),
+
+  create: (userId: string, data: { event: string; url: string }) =>
+    api.post<ApiResponse<WebhookSubscription>>(`/merchant/developer/webhooks?userId=${userId}`, data).then((r) => r.data.data),
+
+  toggle: (userId: string, subscriptionId: string) =>
+    api.put<ApiResponse<WebhookSubscription>>(`/merchant/developer/webhooks/${subscriptionId}/toggle?userId=${userId}`).then((r) => r.data.data),
+
+  delete: (userId: string, subscriptionId: string) =>
+    api.delete<ApiResponse<void>>(`/merchant/developer/webhooks/${subscriptionId}?userId=${userId}`).then((r) => r.data.data),
+
+  test: (userId: string, subscriptionId: string) =>
+    api.post<ApiResponse<WebhookDelivery>>(`/merchant/developer/webhooks/${subscriptionId}/test?userId=${userId}`).then((r) => r.data.data),
+
+  deliveries: (userId: string, page = 0, size = 20) =>
+    api.get<ApiResponse<{ content: WebhookDelivery[]; totalElements: number }>>(`/merchant/developer/webhooks/deliveries?userId=${userId}&page=${page}&size=${size}`).then((r) => r.data.data?.content || []),
+
+  replay: (userId: string, deliveryId: string) =>
+    api.post<ApiResponse<WebhookDelivery>>(`/merchant/developer/webhooks/deliveries/${deliveryId}/replay?userId=${userId}`).then((r) => r.data.data),
+};
+
+export const fraudRuleApi = {
+  list: (userId: string) =>
+    api.get<ApiResponse<FraudRule[]>>(`/merchant/fraud-rules?userId=${userId}`).then((r) => r.data.data || []),
+
+  create: (userId: string, data: { name: string; ruleType: string; threshold: number }) =>
+    api.post<ApiResponse<FraudRule>>(`/merchant/fraud-rules?userId=${userId}`, data).then((r) => r.data.data),
+
+  toggle: (userId: string, ruleId: string) =>
+    api.put<ApiResponse<FraudRule>>(`/merchant/fraud-rules/${ruleId}/toggle?userId=${userId}`).then((r) => r.data.data),
+
+  delete: (userId: string, ruleId: string) =>
+    api.delete<ApiResponse<void>>(`/merchant/fraud-rules/${ruleId}?userId=${userId}`).then((r) => r.data.data),
+};
+
+export const marketingCampaignApi = {
+  list: (userId: string) =>
+    api.get<ApiResponse<MarketingCampaign[]>>(`/merchant/marketing-campaigns?userId=${userId}`).then((r) => r.data.data || []),
+
+  create: (userId: string, data: { name: string; campaignType: string; audienceSegment: string; discountCodeId?: string; cashbackId?: string }) =>
+    api.post<ApiResponse<MarketingCampaign>>(`/merchant/marketing-campaigns?userId=${userId}`, data).then((r) => r.data.data),
+
+  toggle: (userId: string, campaignId: string) =>
+    api.put<ApiResponse<MarketingCampaign>>(`/merchant/marketing-campaigns/${campaignId}/toggle?userId=${userId}`).then((r) => r.data.data),
+
+  delete: (userId: string, campaignId: string) =>
+    api.delete<ApiResponse<void>>(`/merchant/marketing-campaigns/${campaignId}?userId=${userId}`).then((r) => r.data.data),
 };
 
 export const discountApi = {
@@ -753,6 +820,9 @@ export const discountApi = {
 
   validate: (userId: string, code: string, amount?: number) =>
     api.get<ApiResponse<DiscountCode>>(`/merchant/discount-codes/validate?userId=${userId}&code=${encodeURIComponent(code)}${amount ? `&amount=${amount}` : ''}`).then((r) => r.data.data),
+
+  createAbTest: (userId: string, data: { name: string; minSpend: number; maxUses: number; validTo?: string; variants: { code: string; type: string; value: number }[] }) =>
+    api.post<ApiResponse<DiscountCode[]>>(`/merchant/discount-codes/ab-test?userId=${userId}`, data).then((r) => r.data.data || []),
 };
 
 export const cashbackApi = {
@@ -798,10 +868,13 @@ export const catalogApi = {
   list: (userId: string) =>
     api.get<ApiResponse<Product[]>>(`/merchant/products?userId=${userId}`).then((r) => r.data.data || []),
 
-  create: (userId: string, data: { name: string; price: number; description?: string; category?: string; imageUrl?: string }) =>
+  lowStock: (userId: string) =>
+    api.get<ApiResponse<Product[]>>(`/merchant/products/low-stock?userId=${userId}`).then((r) => r.data.data || []),
+
+  create: (userId: string, data: { name: string; price: number; description?: string; category?: string; imageUrl?: string; quantity?: number; lowStockThreshold?: number }) =>
     api.post<ApiResponse<Product>>(`/merchant/products?userId=${userId}`, data).then((r) => r.data.data),
 
-  update: (userId: string, productId: string, data: { name: string; price: number; description?: string; category?: string; imageUrl?: string }) =>
+  update: (userId: string, productId: string, data: { name: string; price: number; description?: string; category?: string; imageUrl?: string; quantity?: number; lowStockThreshold?: number }) =>
     api.put<ApiResponse<Product>>(`/merchant/products/${productId}?userId=${userId}`, data).then((r) => r.data.data),
 
   delete: (userId: string, productId: string) =>
@@ -811,6 +884,9 @@ export const catalogApi = {
 export const customerApi = {
   insights: (userId: string, walletId: string) =>
     api.get<ApiResponse<CustomerInsight[]>>(`/merchant/customers?userId=${userId}&walletId=${walletId}`).then((r) => r.data.data || []),
+
+  segments: (userId: string, walletId: string) =>
+    api.get<ApiResponse<SegmentSummary[]>>(`/merchant/customers/segments?userId=${userId}&walletId=${walletId}`).then((r) => r.data.data || []),
 
   listReviews: (userId: string) =>
     api.get<ApiResponse<MerchantReview[]>>(`/merchant/reviews?userId=${userId}`).then((r) => r.data.data || []),
@@ -834,11 +910,14 @@ export const developerApi = {
   listApiKeys: (userId: string) =>
     api.get<ApiResponse<ApiKey[]>>(`/merchant/developer/api-keys?userId=${userId}`).then((r) => r.data.data || []),
 
-  createApiKey: (userId: string, name: string) =>
-    api.post<ApiResponse<ApiKey>>(`/merchant/developer/api-keys?userId=${userId}`, { name }).then((r) => r.data.data),
+  createApiKey: (userId: string, name: string, environment = 'LIVE') =>
+    api.post<ApiResponse<ApiKey>>(`/merchant/developer/api-keys?userId=${userId}`, { name, environment }).then((r) => r.data.data),
 
   revokeApiKey: (userId: string, keyId: string) =>
     api.put<ApiResponse<void>>(`/merchant/developer/api-keys/${keyId}/revoke?userId=${userId}`).then((r) => r.data.data),
+
+  recordUsage: (userId: string, keyId: string) =>
+    api.put<ApiResponse<ApiKey>>(`/merchant/developer/api-keys/${keyId}/usage?userId=${userId}`).then((r) => r.data.data),
 
   listReportTemplates: (userId: string) =>
     api.get<ApiResponse<ReportTemplate[]>>(`/merchant/developer/report-templates?userId=${userId}`).then((r) => r.data.data || []),

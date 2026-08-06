@@ -12,4 +12,6 @@ public class ApiKeyRequest {
 
     @NotBlank(message = "Key name is required")
     private String name;
+
+    private String environment;
 }

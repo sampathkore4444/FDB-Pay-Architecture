@@ -1,22 +1,32 @@
 package com.fdbpay.merchant.service.service;
 
+import com.fdbpay.merchant.service.client.WalletServiceClient;
 import com.fdbpay.merchant.service.dto.request.MerchantPreferencesRequest;
 import com.fdbpay.merchant.service.dto.request.PayoutAccountRequest;
+import com.fdbpay.merchant.service.dto.request.PayoutRequest;
+import com.fdbpay.merchant.service.dto.response.ContractResponse;
 import com.fdbpay.merchant.service.dto.response.MerchantPreferencesResponse;
 import com.fdbpay.merchant.service.dto.response.PayoutAccountResponse;
+import com.fdbpay.merchant.service.dto.response.PayoutResponse;
 import com.fdbpay.merchant.service.model.Merchant;
+import com.fdbpay.merchant.service.model.Payout;
 import com.fdbpay.merchant.service.model.PayoutAccount;
 import com.fdbpay.merchant.service.model.enums.ActiveStatus;
+import com.fdbpay.merchant.service.model.enums.PayoutStatus;
 import com.fdbpay.merchant.service.repository.MerchantRepository;
 import com.fdbpay.merchant.service.repository.PayoutAccountRepository;
+import com.fdbpay.merchant.service.repository.PayoutRepository;
 import com.fdbpay.shared.constants.ErrorCodes;
 import com.fdbpay.shared.exceptions.BusinessException;
 import com.fdbpay.shared.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,7 +36,9 @@ import java.util.UUID;
 public class PayoutService {
 
     private final PayoutAccountRepository payoutAccountRepository;
+    private final PayoutRepository payoutRepository;
     private final MerchantRepository merchantRepository;
+    private final WalletServiceClient walletServiceClient;
     private final AuditService auditService;
 
     public List<PayoutAccountResponse> listAccounts(UUID merchantId) {
@@ -63,6 +75,76 @@ public class PayoutService {
         payoutAccountRepository.delete(account);
         auditService.log(merchantId, "OWNER", null, null, "DELETE", "PAYOUT_ACCOUNT", accountId.toString(),
                 "Removed payout account " + account.getBankName());
+    }
+
+    // ---- On-demand payouts ----
+
+    @Transactional
+    public PayoutResponse requestPayout(UUID merchantId, PayoutRequest request) {
+        Merchant merchant = requireMerchant(merchantId);
+        PayoutAccount account = getOwned(merchantId, request.getAccountId());
+        Long available = walletServiceClient.getAvailableBalance(merchant.getUserId());
+        if (available == null) {
+            throw new BusinessException(ErrorCodes.SERVICE_UNAVAILABLE, "Unable to fetch wallet balance");
+        }
+        if (request.getAmount() > available) {
+            throw new BusinessException(ErrorCodes.INSUFFICIENT_BALANCE,
+                    "Insufficient balance. Available: " + available + " MMK");
+        }
+        String reference = "PO-" + System.currentTimeMillis();
+        UUID walletId = walletServiceClient.getWalletId(merchant.getUserId());
+        if (walletId == null) {
+            throw new BusinessException(ErrorCodes.SERVICE_UNAVAILABLE, "Unable to resolve wallet");
+        }
+        boolean debited = walletServiceClient.debit(walletId, request.getAmount(),
+                "On-demand payout to " + account.getBankName() + " ending " + mask(account.getAccountNumber()), UUID.randomUUID());
+        Payout payout = Payout.builder()
+                .merchantId(merchantId)
+                .accountId(account.getId())
+                .accountLabel(account.getBankName() + " ending " + mask(account.getAccountNumber()))
+                .amount(request.getAmount())
+                .status(PayoutStatus.PENDING)
+                .reference(reference)
+                .build();
+        if (!debited) {
+            payout.setStatus(PayoutStatus.FAILED);
+            payout.setFailureReason("Wallet debit failed");
+        }
+        payout = payoutRepository.save(payout);
+        if (debited) {
+            payout.setStatus(PayoutStatus.COMPLETED);
+            payout.setCompletedAt(OffsetDateTime.now());
+            payout = payoutRepository.save(payout);
+        }
+        auditService.log(merchantId, "OWNER", null, null, "PAYOUT", "PAYOUT", payout.getId().toString(),
+                "Requested payout of " + request.getAmount() + " MMK to " + payout.getAccountLabel() + " (" + payout.getStatus() + ")");
+        return mapPayout(payout);
+    }
+
+    public Page<PayoutResponse> listPayouts(UUID merchantId, int page, int size) {
+        requireMerchant(merchantId);
+        return payoutRepository.findByMerchantIdOrderByCreatedAtDesc(merchantId, PageRequest.of(page, size))
+                .map(this::mapPayout);
+    }
+
+    public Long getAvailableBalance(UUID merchantId) {
+        Merchant merchant = requireMerchant(merchantId);
+        return walletServiceClient.getAvailableBalance(merchant.getUserId());
+    }
+
+    public ContractResponse getContract(UUID merchantId) {
+        Merchant merchant = requireMerchant(merchantId);
+        ContractResponse.ContractResponseBuilder builder = ContractResponse.builder()
+                .settlementType(merchant.getSettlementType())
+                .settlementFrequencyDays(merchant.getRollingReservePeriodDays())
+                .rollingReserveRate((long) merchant.getRollingReservePercent());
+        try {
+            double rate = merchant.getFeeSchedule() == null ? 0.02 : Double.parseDouble(merchant.getFeeSchedule());
+            builder.feeRate(java.math.BigDecimal.valueOf(rate));
+        } catch (Exception e) {
+            builder.feeRate(java.math.BigDecimal.valueOf(0.02));
+        }
+        return builder.build();
     }
 
     @Transactional
@@ -132,6 +214,20 @@ public class PayoutService {
             return number == null ? "" : number;
         }
         return "****" + number.substring(number.length() - 4);
+    }
+
+    private PayoutResponse mapPayout(Payout payout) {
+        return PayoutResponse.builder()
+                .id(payout.getId())
+                .accountId(payout.getAccountId())
+                .accountLabel(payout.getAccountLabel())
+                .amount(payout.getAmount())
+                .status(payout.getStatus())
+                .reference(payout.getReference())
+                .failureReason(payout.getFailureReason())
+                .createdAt(payout.getCreatedAt())
+                .completedAt(payout.getCompletedAt())
+                .build();
     }
 
     private PayoutAccountResponse mapAccount(PayoutAccount account) {

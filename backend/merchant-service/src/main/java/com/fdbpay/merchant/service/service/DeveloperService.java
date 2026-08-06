@@ -44,17 +44,30 @@ public class DeveloperService {
     @Transactional
     public ApiKeyResponse createApiKey(UUID merchantId, ApiKeyRequest request) {
         requireMerchant(merchantId);
-        String raw = "fdb_live_" + UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().substring(0, 12);
+        boolean sandbox = "SANDBOX".equalsIgnoreCase(request.getEnvironment());
+        String raw = (sandbox ? "fdb_test_" : "fdb_live_")
+                + UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().substring(0, 12);
         ApiKey key = ApiKey.builder()
                 .merchantId(merchantId)
                 .name(request.getName())
                 .keyHash(hash(raw))
                 .keyPreview(raw.substring(0, 14) + "...")
+                .environment(sandbox ? "SANDBOX" : "LIVE")
+                .usageCount(0L)
                 .status(ActiveStatus.ACTIVE)
                 .build();
         key = apiKeyRepository.save(key);
         auditService.log(merchantId, "OWNER", null, null, "CREATE", "API_KEY", key.getId().toString(),
-                "Created API key '" + request.getName() + "'");
+                "Created " + key.getEnvironment() + " API key '" + request.getName() + "'");
+        return mapApiKey(key);
+    }
+
+    @Transactional
+    public ApiKeyResponse recordUsage(UUID merchantId, UUID keyId) {
+        ApiKey key = getOwnedKey(merchantId, keyId);
+        key.setUsageCount(key.getUsageCount() == null ? 1L : key.getUsageCount() + 1);
+        key.setLastUsedAt(java.time.OffsetDateTime.now());
+        key = apiKeyRepository.save(key);
         return mapApiKey(key);
     }
 
@@ -140,6 +153,8 @@ public class DeveloperService {
                 .id(key.getId())
                 .name(key.getName())
                 .keyPreview(key.getKeyPreview())
+                .environment(key.getEnvironment())
+                .usageCount(key.getUsageCount())
                 .status(key.getStatus())
                 .lastUsedAt(key.getLastUsedAt())
                 .createdAt(key.getCreatedAt())

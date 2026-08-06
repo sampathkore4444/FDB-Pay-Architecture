@@ -51,4 +51,11 @@ public class MerchantPaymentLinkController {
             @PathVariable UUID id) {
         return ApiResponse.success(paymentLinkService.deactivate(resolveMerchantId(userId), id));
     }
+
+    @PostMapping("/{id}/resend")
+    public ApiResponse<PaymentLinkResponse> resend(
+            @RequestParam UUID userId,
+            @PathVariable UUID id) {
+        return ApiResponse.success(paymentLinkService.resendReminder(resolveMerchantId(userId), id));
+    }
 }

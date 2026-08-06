@@ -20,6 +20,8 @@ public class ProductResponse {
     private String description;
     private String category;
     private String imageUrl;
+    private Long quantity;
+    private Long lowStockThreshold;
     private ActiveStatus status;
     private OffsetDateTime createdAt;
 }

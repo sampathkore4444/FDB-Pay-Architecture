@@ -18,4 +18,6 @@ public interface PaymentLinkService {
     PaymentLinkPublicResponse getByToken(String token);
 
     PaymentLinkPublicResponse markPaid(String token);
+
+    PaymentLinkResponse resendReminder(UUID merchantId, UUID linkId);
 }

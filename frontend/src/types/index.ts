@@ -348,6 +348,7 @@ export interface PaymentLink {
   customerName?: string;
   status: PaymentLinkStatus;
   singleUse: boolean;
+  reminderCount?: number;
   paidAt?: string;
   expiresAt?: string;
   createdAt: string;
@@ -609,6 +610,8 @@ export interface Product {
   description?: string;
   category?: string;
   imageUrl?: string;
+  quantity?: number;
+  lowStockThreshold?: number;
   status: ActiveStatus | string;
   createdAt?: string;
 }
@@ -656,6 +659,8 @@ export interface ApiKey {
   id: string;
   name: string;
   keyPreview?: string;
+  environment?: string;
+  usageCount?: number;
   status: ActiveStatus | string;
   lastUsedAt?: string;
   createdAt?: string;
@@ -696,4 +701,71 @@ export interface StorePerformance {
   storeId: string;
   amount: number;
   count: number;
+}
+
+export interface Payout {
+  id: string;
+  accountId: string;
+  accountLabel: string;
+  amount: number;
+  status: string;
+  reference?: string;
+  failureReason?: string;
+  createdAt?: string;
+  completedAt?: string;
+}
+
+export interface ContractInfo {
+  settlementType?: string;
+  feeRate?: number;
+  settlementFrequencyDays?: number;
+  rollingReserveRate?: number;
+}
+
+export interface WebhookSubscription {
+  id: string;
+  event: string;
+  url: string;
+  enabled: boolean;
+  createdAt?: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  subscriptionId?: string;
+  event: string;
+  url: string;
+  payload?: string;
+  status: string;
+  attempts?: number;
+  statusCode?: number;
+  error?: string;
+  createdAt?: string;
+  deliveredAt?: string;
+}
+
+export interface FraudRule {
+  id: string;
+  name: string;
+  ruleType: string;
+  threshold: number;
+  enabled: boolean;
+  createdAt?: string;
+}
+
+export interface MarketingCampaign {
+  id: string;
+  name: string;
+  campaignType: string;
+  audienceSegment: string;
+  discountCodeId?: string;
+  cashbackId?: string;
+  status: ActiveStatus | string;
+  createdAt?: string;
+}
+
+export interface SegmentSummary {
+  segment: string;
+  customerCount: number;
+  totalSpend: number;
 }

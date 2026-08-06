@@ -35,6 +35,14 @@ public class ApiKey {
     @Column(nullable = false, length = 20)
     private String keyPreview;
 
+    @Builder.Default
+    @Column(nullable = false, length = 20)
+    private String environment = "LIVE";
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Long usageCount = 0L;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ActiveStatus status;

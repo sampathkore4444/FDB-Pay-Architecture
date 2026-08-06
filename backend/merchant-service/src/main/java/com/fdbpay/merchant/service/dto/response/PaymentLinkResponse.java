@@ -22,6 +22,7 @@ public class PaymentLinkResponse {
     private String customerName;
     private PaymentLinkStatus status;
     private boolean singleUse;
+    private Integer reminderCount;
     private OffsetDateTime paidAt;
     private OffsetDateTime expiresAt;
     private OffsetDateTime createdAt;

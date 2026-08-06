@@ -10,6 +10,13 @@ import { Modal } from '../../components/modals/Modal';
 import type { DiscountCode } from '../../types';
 
 const emptyForm = { code: '', type: 'PERCENT', value: '', minSpend: '', maxUses: '', validTo: '' };
+const emptyAb = {
+  name: '', minSpend: '', maxUses: '', validTo: '',
+  variants: [
+    { code: '', type: 'PERCENT', value: '' },
+    { code: '', type: 'PERCENT', value: '' },
+  ],
+};
 
 export function CouponsPage() {
   const { t } = useTranslation();
@@ -18,6 +25,8 @@ export function CouponsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [showAbForm, setShowAbForm] = useState(false);
+  const [abForm, setAbForm] = useState(emptyAb);
   const [submitting, setSubmitting] = useState(false);
 
   const load = async () => {
@@ -86,6 +95,34 @@ export function CouponsPage() {
 
   const set = (key: keyof typeof emptyForm, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
+  const handleAbSave = async () => {
+    if (!user || !abForm.name || abForm.variants.some((v) => !v.code || !v.value)) return;
+    setSubmitting(true);
+    try {
+      await discountApi.createAbTest(user.id, {
+        name: abForm.name,
+        minSpend: abForm.minSpend ? Number(abForm.minSpend) : 0,
+        maxUses: abForm.maxUses ? Number(abForm.maxUses) : 100,
+        validTo: abForm.validTo ? new Date(abForm.validTo).toISOString() : undefined,
+        variants: abForm.variants.map((v) => ({ code: v.code.toUpperCase(), type: v.type, value: Number(v.value) })),
+      });
+      toast.success(t.coupons.abCreated);
+      setShowAbForm(false);
+      setAbForm(emptyAb);
+      await load();
+    } catch (err) {
+      console.error('Failed to launch A/B test', err);
+      toast.error(t.common.loadFailed);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const setVariant = (index: number, key: string, value: string) =>
+    setAbForm((f) => ({ ...f, variants: f.variants.map((v, i) => (i === index ? { ...v, [key]: value } : v)) }));
+
+  const addVariant = () => setAbForm((f) => ({ ...f, variants: [...f.variants, { code: '', type: 'PERCENT', value: '' }] }));
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -93,7 +130,10 @@ export function CouponsPage() {
           <h1 className="text-2xl font-bold text-gray-900">{t.coupons.title}</h1>
           <p className="text-sm text-gray-500 mt-1">{t.coupons.subtitle}</p>
         </div>
-        <Button onClick={() => { setForm(emptyForm); setShowForm(true); }}>{t.coupons.createCode}</Button>
+        <div className="flex space-x-2">
+          <Button variant="secondary" onClick={() => { setAbForm(emptyAb); setShowAbForm(true); }}>{t.coupons.createAbTest}</Button>
+          <Button onClick={() => { setForm(emptyForm); setShowForm(true); }}>{t.coupons.createCode}</Button>
+        </div>
       </div>
 
       {loading ? (

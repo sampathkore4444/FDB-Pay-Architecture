@@ -42,6 +42,8 @@ public class CatalogService {
                 .description(request.getDescription())
                 .category(request.getCategory())
                 .imageUrl(request.getImageUrl())
+                .quantity(request.getQuantity() == null ? 0L : request.getQuantity())
+                .lowStockThreshold(request.getLowStockThreshold() == null ? 0L : request.getLowStockThreshold())
                 .status(ActiveStatus.ACTIVE)
                 .build();
         product = productRepository.save(product);
@@ -58,9 +60,21 @@ public class CatalogService {
         product.setDescription(request.getDescription());
         product.setCategory(request.getCategory());
         product.setImageUrl(request.getImageUrl());
+        product.setQuantity(request.getQuantity() == null ? product.getQuantity() : request.getQuantity());
+        product.setLowStockThreshold(request.getLowStockThreshold() == null ? product.getLowStockThreshold() : request.getLowStockThreshold());
         product = productRepository.save(product);
         auditService.log(merchantId, "OWNER", null, null, "UPDATE", "PRODUCT", productId.toString(), "Updated product '" + product.getName() + "'");
         return mapToResponse(product);
+    }
+
+    public List<ProductResponse> lowStock(UUID merchantId) {
+        requireMerchant(merchantId);
+        return productRepository.findByMerchantIdOrderByCreatedAtDesc(merchantId).stream()
+                .filter(p -> p.getStatus() == ActiveStatus.ACTIVE
+                        && p.getLowStockThreshold() != null && p.getLowStockThreshold() > 0
+                        && p.getQuantity() != null && p.getQuantity() <= p.getLowStockThreshold())
+                .map(this::mapToResponse)
+                .toList();
     }
 
     @Transactional
@@ -93,6 +107,8 @@ public class CatalogService {
                 .description(product.getDescription())
                 .category(product.getCategory())
                 .imageUrl(product.getImageUrl())
+                .quantity(product.getQuantity())
+                .lowStockThreshold(product.getLowStockThreshold())
                 .status(product.getStatus())
                 .createdAt(product.getCreatedAt())
                 .build();

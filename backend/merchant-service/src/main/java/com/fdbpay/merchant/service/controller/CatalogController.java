@@ -25,6 +25,11 @@ public class CatalogController {
         return ApiResponse.success(catalogService.listProducts(accessHelper.resolveMerchantId(userId)));
     }
 
+    @GetMapping("/low-stock")
+    public ApiResponse<List<ProductResponse>> lowStock(@RequestParam UUID userId) {
+        return ApiResponse.success(catalogService.lowStock(accessHelper.resolveMerchantId(userId)));
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<ProductResponse> create(@RequestParam UUID userId, @Valid @RequestBody ProductRequest request) {

@@ -16,6 +16,8 @@ public class ApiKeyResponse {
     private UUID id;
     private String name;
     private String keyPreview;
+    private String environment;
+    private Long usageCount;
     private ActiveStatus status;
     private OffsetDateTime lastUsedAt;
     private OffsetDateTime createdAt;

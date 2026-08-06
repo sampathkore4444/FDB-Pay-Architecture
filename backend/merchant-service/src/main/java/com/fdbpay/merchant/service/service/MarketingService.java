@@ -1,21 +1,28 @@
 package com.fdbpay.merchant.service.service;
 
 import com.fdbpay.merchant.service.dto.request.CashbackCampaignRequest;
+import com.fdbpay.merchant.service.dto.request.AbTestRequest;
 import com.fdbpay.merchant.service.dto.request.DiscountCodeRequest;
 import com.fdbpay.merchant.service.dto.request.LoyaltySettingsRequest;
+import com.fdbpay.merchant.service.dto.request.MarketingCampaignRequest;
 import com.fdbpay.merchant.service.dto.request.ReferralProgramRequest;
 import com.fdbpay.merchant.service.dto.response.CashbackCampaignResponse;
 import com.fdbpay.merchant.service.dto.response.DiscountCodeResponse;
 import com.fdbpay.merchant.service.dto.response.LoyaltySettingsResponse;
+import com.fdbpay.merchant.service.dto.response.MarketingCampaignResponse;
 import com.fdbpay.merchant.service.dto.response.ReferralProgramResponse;
 import com.fdbpay.merchant.service.model.CashbackCampaign;
 import com.fdbpay.merchant.service.model.DiscountCode;
 import com.fdbpay.merchant.service.model.LoyaltySettings;
+import com.fdbpay.merchant.service.model.MarketingCampaign;
 import com.fdbpay.merchant.service.model.ReferralProgram;
 import com.fdbpay.merchant.service.model.enums.ActiveStatus;
+import com.fdbpay.merchant.service.model.enums.CampaignType;
+import com.fdbpay.merchant.service.model.enums.DiscountType;
 import com.fdbpay.merchant.service.repository.CashbackCampaignRepository;
 import com.fdbpay.merchant.service.repository.DiscountCodeRepository;
 import com.fdbpay.merchant.service.repository.LoyaltySettingsRepository;
+import com.fdbpay.merchant.service.repository.MarketingCampaignRepository;
 import com.fdbpay.merchant.service.repository.MerchantRepository;
 import com.fdbpay.merchant.service.repository.ReferralProgramRepository;
 import com.fdbpay.shared.constants.ErrorCodes;
@@ -41,9 +48,116 @@ public class MarketingService {
     private final CashbackCampaignRepository cashbackCampaignRepository;
     private final ReferralProgramRepository referralProgramRepository;
     private final LoyaltySettingsRepository loyaltySettingsRepository;
+    private final MarketingCampaignRepository marketingCampaignRepository;
     private final MerchantRepository merchantRepository;
     private final AuditService auditService;
     private final Random random = new Random();
+
+    // ---- A/B discount-code variants ----
+
+    @Transactional
+    public List<DiscountCodeResponse> createAbTest(UUID merchantId, AbTestRequest request) {
+        requireMerchant(merchantId);
+        if (request.getVariants() == null || request.getVariants().size() < 2) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "An A/B test requires at least 2 variants");
+        }
+        List<DiscountCodeResponse> created = new java.util.ArrayList<>();
+        for (AbTestRequest.AbVariantRequest variant : request.getVariants()) {
+            DiscountCode code = DiscountCode.builder()
+                    .merchantId(merchantId)
+                    .code(variant.getCode().trim().toUpperCase(Locale.ROOT))
+                    .type(java.util.Arrays.stream(DiscountType.values())
+                            .filter(t -> t.name().equalsIgnoreCase(variant.getType()))
+                            .findFirst()
+                            .orElseThrow(() -> new BusinessException(ErrorCodes.VALIDATION_ERROR, "Unsupported discount type: " + variant.getType())))
+                    .value(variant.getValue())
+                    .minSpend(request.getMinSpend() == null ? 0L : request.getMinSpend())
+                    .maxUses(request.getMaxUses())
+                    .usedCount(0)
+                    .validFrom(OffsetDateTime.now())
+                    .validTo(request.getValidTo())
+                    .status(ActiveStatus.ACTIVE)
+                    .build();
+            code = discountCodeRepository.save(code);
+            created.add(mapDiscount(code));
+        }
+        auditService.log(merchantId, "OWNER", null, null, "CREATE", "AB_TEST", merchantId.toString(),
+                "Launched A/B test '" + request.getName() + "' with " + created.size() + " variants");
+        return created;
+    }
+
+    // ---- Automated marketing campaigns ----
+
+    public List<MarketingCampaignResponse> listMarketingCampaigns(UUID merchantId) {
+        requireMerchant(merchantId);
+        return marketingCampaignRepository.findByMerchantIdOrderByCreatedAtDesc(merchantId)
+                .stream().map(this::mapCampaign2).toList();
+    }
+
+    @Transactional
+    public MarketingCampaignResponse createMarketingCampaign(UUID merchantId, MarketingCampaignRequest request) {
+        requireMerchant(merchantId);
+        CampaignType type = parseCampaignType(request.getCampaignType());
+        MarketingCampaign campaign = MarketingCampaign.builder()
+                .merchantId(merchantId)
+                .name(request.getName())
+                .campaignType(type)
+                .audienceSegment(request.getAudienceSegment())
+                .discountCodeId(request.getDiscountCodeId())
+                .cashbackId(request.getCashbackId())
+                .status(ActiveStatus.ACTIVE)
+                .build();
+        campaign = marketingCampaignRepository.save(campaign);
+        auditService.log(merchantId, "OWNER", null, null, "CREATE", "MARKETING_CAMPAIGN", campaign.getId().toString(),
+                "Created automated campaign '" + campaign.getName() + "' targeting " + campaign.getAudienceSegment());
+        return mapCampaign2(campaign);
+    }
+
+    @Transactional
+    public MarketingCampaignResponse toggleMarketingCampaign(UUID merchantId, UUID campaignId) {
+        MarketingCampaign campaign = getOwnedCampaign2(merchantId, campaignId);
+        campaign.setStatus(campaign.getStatus() == ActiveStatus.ACTIVE ? ActiveStatus.INACTIVE : ActiveStatus.ACTIVE);
+        campaign = marketingCampaignRepository.save(campaign);
+        return mapCampaign2(campaign);
+    }
+
+    @Transactional
+    public void deleteMarketingCampaign(UUID merchantId, UUID campaignId) {
+        MarketingCampaign campaign = getOwnedCampaign2(merchantId, campaignId);
+        marketingCampaignRepository.delete(campaign);
+        auditService.log(merchantId, "OWNER", null, null, "DELETE", "MARKETING_CAMPAIGN", campaignId.toString(),
+                "Deleted automated campaign '" + campaign.getName() + "'");
+    }
+
+    private CampaignType parseCampaignType(String raw) {
+        try {
+            return CampaignType.valueOf(raw.trim().toUpperCase(Locale.ROOT));
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCodes.VALIDATION_ERROR, "Unsupported campaign type: " + raw);
+        }
+    }
+
+    private MarketingCampaign getOwnedCampaign2(UUID merchantId, UUID campaignId) {
+        MarketingCampaign campaign = marketingCampaignRepository.findById(campaignId)
+                .orElseThrow(() -> new ResourceNotFoundException("MarketingCampaign", campaignId.toString()));
+        if (!campaign.getMerchantId().equals(merchantId)) {
+            throw new BusinessException(ErrorCodes.UNAUTHORIZED, "Campaign does not belong to this merchant");
+        }
+        return campaign;
+    }
+
+    private MarketingCampaignResponse mapCampaign2(MarketingCampaign campaign) {
+        return MarketingCampaignResponse.builder()
+                .id(campaign.getId())
+                .name(campaign.getName())
+                .campaignType(campaign.getCampaignType())
+                .audienceSegment(campaign.getAudienceSegment())
+                .discountCodeId(campaign.getDiscountCodeId())
+                .cashbackId(campaign.getCashbackId())
+                .status(campaign.getStatus())
+                .createdAt(campaign.getCreatedAt())
+                .build();
+    }
 
     // ---- Discount codes ----
 
