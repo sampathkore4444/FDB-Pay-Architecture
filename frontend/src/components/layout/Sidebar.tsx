@@ -62,6 +62,7 @@ const icons: Record<string, string> = {
   customers: '🧑‍🤝‍🧑',
   auditLog: '📜',
   developer: '🧑‍💻',
+  fraudRules: '🛡️',
 };
 
 interface NavItem {
@@ -119,6 +120,7 @@ const navItems: NavItem[] = [
   { key: 'customers', route: '/merchant/customers', roles: ['MERCHANT'], group: 'overview' },
   { key: 'auditLog', route: '/merchant/audit-log', roles: ['MERCHANT'], group: 'management' },
   { key: 'developer', route: '/merchant/developer', roles: ['MERCHANT'], group: 'management' },
+  { key: 'fraudRules', route: '/merchant/fraud-rules', roles: ['MERCHANT'], group: 'risk' },
 
   { key: 'agent', route: '/agent', roles: ['AGENT'] },
 

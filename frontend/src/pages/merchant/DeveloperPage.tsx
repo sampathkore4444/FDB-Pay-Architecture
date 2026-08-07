@@ -294,7 +294,7 @@ export function DeveloperPage() {
                     <tr className="text-left text-xs uppercase text-gray-400 border-b border-gray-200">
                       <th className="pb-2 pr-4">{t.developer.event}</th>
                       <th className="pb-2 pr-4">{t.developer.url}</th>
-                      <th className="pb-2 pr-4">{t.developer.status}</th>
+                      <th className="pb-2 pr-4">{t.common.status}</th>
                       <th className="pb-2 pr-4">{t.developer.attempts}</th>
                       <th className="pb-2 pr-4">{t.developer.time}</th>
                       <th className="pb-2">{t.common.actions}</th>

@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/modals/Modal';
 import { formatCurrency } from '../../utils';
-import type { Merchant, CustomerInsight, MerchantReview } from '../../types';
+import type { Merchant, CustomerInsight, MerchantReview, SegmentSummary } from '../../types';
 
 const emptyReview = { customerName: '', customerPhone: '', rating: '5', comment: '' };
 
@@ -17,6 +17,7 @@ export function CustomersPage() {
   const user = useAuthStore((s) => s.user);
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [insights, setInsights] = useState<CustomerInsight[]>([]);
+  const [segments, setSegments] = useState<SegmentSummary[]>([]);
   const [reviews, setReviews] = useState<MerchantReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [showReviewForm, setShowReviewForm] = useState(false);
@@ -35,8 +36,9 @@ export function CustomersPage() {
     setLoading(true);
     try {
       const wallet = await walletApi.getWallet(merchant.userId);
-      const [c, r] = await Promise.all([customerApi.insights(user.id, wallet.id), customerApi.listReviews(user.id)]);
+      const [c, s, r] = await Promise.all([customerApi.insights(user.id, wallet.id), customerApi.segments(user.id, wallet.id), customerApi.listReviews(user.id)]);
       setInsights(c);
+      setSegments(s);
       setReviews(r);
     } catch (err) {
       console.error('Failed to load customers', err);
@@ -142,6 +144,22 @@ export function CustomersPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </Card>
+
+          <Card title={t.customers.segmentsTitle}>
+            {segments.length === 0 ? (
+              <p className="text-center text-gray-500 py-6">{t.common.noData}</p>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {segments.map((seg) => (
+                  <div key={seg.segment} className="border border-gray-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900">{seg.segment}</h4>
+                    <p className="text-sm text-gray-500 mt-1">{seg.customerCount} {t.customers.customers}</p>
+                    <p className="text-lg font-bold text-gray-900 mt-2">{formatCurrency(seg.totalSpend)}</p>
+                  </div>
+                ))}
               </div>
             )}
           </Card>

@@ -182,7 +182,7 @@ export function PayoutPage() {
                     <tr className="text-left text-xs uppercase text-gray-400 border-b border-gray-200">
                       <th className="pb-2 pr-4">{t.payout.account}</th>
                       <th className="pb-2 pr-4">{t.payout.amount}</th>
-                      <th className="pb-2 pr-4">{t.payout.status}</th>
+                      <th className="pb-2 pr-4">{t.common.status}</th>
                       <th className="pb-2 pr-4">{t.payout.reference}</th>
                       <th className="pb-2">{t.payout.date}</th>
                     </tr>

@@ -196,6 +196,38 @@ export function CouponsPage() {
           </div>
         </div>
       </Modal>
+
+      <Modal open={showAbForm} onClose={() => setShowAbForm(false)} title={t.coupons.createAbTest}>
+        <div className="space-y-4">
+          <Input label={t.coupons.abName} value={abForm.name} onChange={(e) => setAbForm((f) => ({ ...f, name: e.target.value }))} placeholder="Summer Sale A/B" />
+          <div className="grid grid-cols-2 gap-4">
+            <Input label={t.coupons.minSpend} type="number" value={abForm.minSpend} onChange={(e) => setAbForm((f) => ({ ...f, minSpend: e.target.value }))} />
+            <Input label={t.coupons.maxUses} type="number" value={abForm.maxUses} onChange={(e) => setAbForm((f) => ({ ...f, maxUses: e.target.value }))} />
+          </div>
+          <Input label={t.coupons.validTo} type="date" value={abForm.validTo} onChange={(e) => setAbForm((f) => ({ ...f, validTo: e.target.value }))} />
+          <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">{t.coupons.variants}</span>
+              <Button size="sm" variant="secondary" onClick={addVariant}>+</Button>
+            </div>
+            {abForm.variants.map((variant, i) => (
+              <div key={i} className="grid grid-cols-[1fr_1.2fr_0.8fr_auto] gap-2 items-end">
+                <Input placeholder={t.coupons.code} value={variant.code} onChange={(e) => setVariant(i, 'code', e.target.value)} />
+                <select value={variant.type} onChange={(e) => setVariant(i, 'type', e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                  <option value="PERCENT">PERCENT</option>
+                  <option value="FIXED">FIXED</option>
+                </select>
+                <Input type="number" placeholder={t.coupons.value} value={variant.value} onChange={(e) => setVariant(i, 'value', e.target.value)} />
+                <Button size="sm" variant="danger" onClick={() => setAbForm((f) => ({ ...f, variants: f.variants.filter((_, j) => j !== i) }))}>{t.common.delete}</Button>
+              </div>
+            ))}
+          </div>
+          <div className="flex space-x-3">
+            <Button onClick={handleAbSave} loading={submitting} disabled={!abForm.name || abForm.variants.length < 2 || abForm.variants.some((v) => !v.code || !v.value)} className="flex-1">{t.coupons.launch}</Button>
+            <Button variant="secondary" onClick={() => setShowAbForm(false)} className="flex-1">{t.common.cancel}</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

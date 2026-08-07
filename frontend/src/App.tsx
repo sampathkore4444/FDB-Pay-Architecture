@@ -36,6 +36,7 @@ import { LoyaltyPage } from './pages/merchant/LoyaltyPage';
 import { ReferralPage } from './pages/merchant/ReferralPage';
 import { MerchantAuditLogPage } from './pages/merchant/AuditLogPage';
 import { DeveloperPage } from './pages/merchant/DeveloperPage';
+import { FraudRulesPage } from './pages/merchant/FraudRulesPage';
 import { StoreComparePage } from './pages/merchant/StoreComparePage';
 import { MerchantSettingsPage } from './pages/merchant/MerchantSettingsPage';
 import { AgentPage } from './pages/agent/AgentPage';
@@ -122,6 +123,7 @@ function App() {
             <Route path="/merchant/customers" element={<RoleGuard allowedRoles={MERCHANT}><CustomersPage /></RoleGuard>} />
             <Route path="/merchant/audit-log" element={<RoleGuard allowedRoles={MERCHANT}><MerchantAuditLogPage /></RoleGuard>} />
             <Route path="/merchant/developer" element={<RoleGuard allowedRoles={MERCHANT}><DeveloperPage /></RoleGuard>} />
+            <Route path="/merchant/fraud-rules" element={<RoleGuard allowedRoles={MERCHANT}><FraudRulesPage /></RoleGuard>} />
 
             {/* Agent pages */}
             <Route path="/agent" element={<RoleGuard allowedRoles={AGENT}><AgentPage /></RoleGuard>} />

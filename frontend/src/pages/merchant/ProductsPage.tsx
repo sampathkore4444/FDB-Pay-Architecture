@@ -10,12 +10,13 @@ import { Modal } from '../../components/modals/Modal';
 import { formatCurrency } from '../../utils';
 import type { Product } from '../../types';
 
-const emptyForm = { name: '', price: '', category: '', description: '', imageUrl: '' };
+const emptyForm = { name: '', price: '', category: '', description: '', imageUrl: '', quantity: '', lowStockThreshold: '' };
 
 export function ProductsPage() {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const [products, setProducts] = useState<Product[]>([]);
+  const [lowStock, setLowStock] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -27,6 +28,7 @@ export function ProductsPage() {
     setLoading(true);
     try {
       setProducts(await catalogApi.list(user.id));
+      setLowStock(await catalogApi.lowStock(user.id));
     } catch (err) {
       console.error('Failed to load products', err);
       toast.error(t.common.loadFailed);
@@ -53,6 +55,8 @@ export function ProductsPage() {
       category: product.category || '',
       description: product.description || '',
       imageUrl: product.imageUrl || '',
+      quantity: product.quantity != null ? String(product.quantity) : '',
+      lowStockThreshold: product.lowStockThreshold != null ? String(product.lowStockThreshold) : '',
     });
     setShowForm(true);
   };
@@ -67,6 +71,8 @@ export function ProductsPage() {
         category: form.category || undefined,
         description: form.description || undefined,
         imageUrl: form.imageUrl || undefined,
+        quantity: form.quantity ? Number(form.quantity) : undefined,
+        lowStockThreshold: form.lowStockThreshold ? Number(form.lowStockThreshold) : undefined,
       };
       if (editing) {
         await catalogApi.update(user.id, editing.id, payload);
@@ -111,29 +117,63 @@ export function ProductsPage() {
 
       {loading ? (
         <Card><p className="text-center text-gray-500 py-10">{t.common.loading}</p></Card>
-      ) : products.length === 0 ? (
-        <Card><p className="text-center text-gray-500 py-10">{t.products.noProducts}</p></Card>
       ) : (
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {products.map((product) => (
-            <Card key={product.id}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-gray-900">{product.name}</h3>
-                  {product.category && <p className="text-sm text-gray-400 mt-1">{product.category}</p>}
+        <>
+          <Card title={t.products.lowStockTitle}>
+            {lowStock.length === 0 ? (
+              <p className="text-center text-gray-500 py-6">{t.products.noLowStock}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-gray-400 border-b border-gray-200">
+                      <th className="pb-2 pr-4">{t.products.name}</th>
+                      <th className="pb-2 pr-4">{t.products.quantity}</th>
+                      <th className="pb-2 pr-4">{t.products.lowStockThreshold}</th>
+                      <th className="pb-2">{t.common.status}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lowStock.map((product) => (
+                      <tr key={product.id} className="border-b border-gray-100">
+                        <td className="py-2 pr-4 font-medium text-gray-900">{product.name}</td>
+                        <td className="py-2 pr-4 text-gray-900">{product.quantity ?? 0}</td>
+                        <td className="py-2 pr-4 text-gray-600">{product.lowStockThreshold ?? 0}</td>
+                        <td className="py-2"><span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">{t.products.lowStock}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {products.length === 0 ? (
+            <Card><p className="text-center text-gray-500 py-10">{t.products.noProducts}</p></Card>
+          ) : (
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {products.map((product) => (
+              <Card key={product.id}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{product.name}</h3>
+                    {product.category && <p className="text-sm text-gray-400 mt-1">{product.category}</p>}
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${product.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{product.status}</span>
                 </div>
-                <span className={`px-2 py-0.5 rounded text-xs font-medium ${product.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{product.status}</span>
-              </div>
-              {product.imageUrl && <img src={product.imageUrl} alt={product.name} className="mt-3 h-28 w-full object-cover rounded-lg" />}
-              <p className="mt-3 text-lg font-bold text-gray-900">{formatCurrency(product.price)}</p>
-              {product.description && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{product.description}</p>}
-              <div className="mt-4 flex justify-end space-x-2">
-                <Button size="sm" variant="ghost" onClick={() => openEdit(product)}>{t.common.edit}</Button>
-                <Button size="sm" variant="danger" onClick={() => remove(product)}>{t.common.delete}</Button>
-              </div>
-            </Card>
-          ))}
-        </div>
+                {product.imageUrl && <img src={product.imageUrl} alt={product.name} className="mt-3 h-28 w-full object-cover rounded-lg" />}
+                <p className="mt-3 text-lg font-bold text-gray-900">{formatCurrency(product.price)}</p>
+                {product.quantity != null && <p className="text-sm text-gray-500 mt-1">{t.products.quantity}: {product.quantity}</p>}
+                {product.description && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{product.description}</p>}
+                <div className="mt-4 flex justify-end space-x-2">
+                  <Button size="sm" variant="ghost" onClick={() => openEdit(product)}>{t.common.edit}</Button>
+                  <Button size="sm" variant="danger" onClick={() => remove(product)}>{t.common.delete}</Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+          )}
+        </>
       )}
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? t.products.editProduct : t.products.addProduct}>
@@ -142,6 +182,10 @@ export function ProductsPage() {
           <div className="grid grid-cols-2 gap-4">
             <Input label={t.products.price} type="number" value={form.price} onChange={(e) => set('price', e.target.value)} />
             <Input label={t.products.category} value={form.category} onChange={(e) => set('category', e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input label={t.products.quantity} type="number" min={0} value={form.quantity} onChange={(e) => set('quantity', e.target.value)} />
+            <Input label={t.products.lowStockThreshold} type="number" min={0} value={form.lowStockThreshold} onChange={(e) => set('lowStockThreshold', e.target.value)} />
           </div>
           <Input label={t.products.imageUrl} value={form.imageUrl} onChange={(e) => set('imageUrl', e.target.value)} />
           <Input label={t.products.description} value={form.description} onChange={(e) => set('description', e.target.value)} />

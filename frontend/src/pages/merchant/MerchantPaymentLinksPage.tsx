@@ -77,6 +77,18 @@ export function MerchantPaymentLinksPage() {
     }
   };
 
+  const handleResend = async (link: PaymentLink) => {
+    if (!user) return;
+    try {
+      await paymentLinksApi.resend(user.id, link.id);
+      toast.success(t.paymentLinks.reminderSent);
+      await load();
+    } catch (err) {
+      console.error('Failed to resend reminder', err);
+      toast.error(t.paymentLinks.resendFailed);
+    }
+  };
+
   const set = (key: keyof typeof emptyForm, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
   const statusBadge = (s: PaymentLink['status']) => {
@@ -132,11 +144,13 @@ export function MerchantPaymentLinksPage() {
                   <p className="text-xs text-gray-400 mt-1">
                     {t.paymentLinks.singleUse} · {formatDate(link.createdAt)}
                     {link.customerName ? ` · ${link.customerName}` : ''}
+                    {link.reminderCount ? ` · ${t.paymentLinks.reminders}: ${link.reminderCount}` : ''}
                   </p>
                 </div>
                 <div className="flex items-center space-x-2">
                   {link.status === 'ACTIVE' && (
                     <>
+                      {link.customerPhone && <Button variant="secondary" size="sm" onClick={() => handleResend(link)}>{t.paymentLinks.sendReminder}</Button>}
                       <Button variant="secondary" size="sm" onClick={() => handleCopy(link)}>{t.paymentLinks.copyLink}</Button>
                       <Button variant="danger" size="sm" onClick={() => handleDeactivate(link)}>{t.paymentLinks.deactivate}</Button>
                     </>
