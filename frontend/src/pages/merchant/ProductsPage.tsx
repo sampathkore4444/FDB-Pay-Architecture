@@ -8,9 +8,10 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/modals/Modal';
 import { formatCurrency } from '../../utils';
-import type { Product } from '../../types';
+import type { Product, ProductVariant } from '../../types';
 
-const emptyForm = { name: '', price: '', category: '', description: '', imageUrl: '', quantity: '', lowStockThreshold: '' };
+const emptyForm = { name: '', price: '', category: '', description: '', imageUrl: '', quantity: '', lowStockThreshold: '', taxRate: '', deliverable: false, deliveryContent: '' };
+const emptyVariant = { sku: '', name: '', priceDelta: '', quantity: '' };
 
 export function ProductsPage() {
   const { t } = useTranslation();
@@ -22,6 +23,11 @@ export function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [variantsFor, setVariantsFor] = useState<Product | null>(null);
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [showVariantForm, setShowVariantForm] = useState(false);
+  const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null);
+  const [variantForm, setVariantForm] = useState(emptyVariant);
 
   const load = async () => {
     if (!user) return;
@@ -57,6 +63,9 @@ export function ProductsPage() {
       imageUrl: product.imageUrl || '',
       quantity: product.quantity != null ? String(product.quantity) : '',
       lowStockThreshold: product.lowStockThreshold != null ? String(product.lowStockThreshold) : '',
+      taxRate: product.taxRate != null ? String(product.taxRate) : '',
+      deliverable: product.deliverable ?? false,
+      deliveryContent: product.deliveryContent || '',
     });
     setShowForm(true);
   };
@@ -73,6 +82,9 @@ export function ProductsPage() {
         imageUrl: form.imageUrl || undefined,
         quantity: form.quantity ? Number(form.quantity) : undefined,
         lowStockThreshold: form.lowStockThreshold ? Number(form.lowStockThreshold) : undefined,
+        taxRate: form.taxRate ? Number(form.taxRate) : undefined,
+        deliverable: form.deliverable || undefined,
+        deliveryContent: form.deliverable && form.deliveryContent ? form.deliveryContent : undefined,
       };
       if (editing) {
         await catalogApi.update(user.id, editing.id, payload);
@@ -103,7 +115,74 @@ export function ProductsPage() {
     }
   };
 
-  const set = (key: keyof typeof emptyForm, value: string) => setForm((f) => ({ ...f, [key]: value }));
+  const openVariants = async (product: Product) => {
+    if (!user) return;
+    setVariantsFor(product);
+    setVariants(await catalogApi.listVariants(user.id, product.id).catch(() => []));
+  };
+
+  const openVariantCreate = () => {
+    setEditingVariant(null);
+    setVariantForm(emptyVariant);
+    setShowVariantForm(true);
+  };
+
+  const openVariantEdit = (variant: ProductVariant) => {
+    setEditingVariant(variant);
+    setVariantForm({
+      sku: variant.sku,
+      name: variant.name,
+      priceDelta: String(variant.priceDelta),
+      quantity: String(variant.quantity),
+    });
+    setShowVariantForm(true);
+  };
+
+  const saveVariant = async () => {
+    if (!user || !variantsFor || !variantForm.sku) return;
+    setSubmitting(true);
+    try {
+      if (editingVariant) {
+        await catalogApi.updateVariant(user.id, variantsFor.id, editingVariant.id, {
+          sku: variantForm.sku,
+          name: variantForm.name || undefined,
+          priceDelta: variantForm.priceDelta ? Number(variantForm.priceDelta) : undefined,
+          quantity: variantForm.quantity ? Number(variantForm.quantity) : undefined,
+        });
+        toast.success(t.products.variantUpdated);
+      } else {
+        await catalogApi.addVariant(user.id, variantsFor.id, {
+          sku: variantForm.sku,
+          name: variantForm.name,
+          priceDelta: variantForm.priceDelta ? Number(variantForm.priceDelta) : undefined,
+          quantity: variantForm.quantity ? Number(variantForm.quantity) : undefined,
+        });
+        toast.success(t.products.variantCreated);
+      }
+      setShowVariantForm(false);
+      setVariants(await catalogApi.listVariants(user.id, variantsFor.id));
+    } catch (err) {
+      console.error('Failed to save variant', err);
+      toast.error(t.common.loadFailed);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const removeVariant = async (variant: ProductVariant) => {
+    if (!user || !variantsFor || !window.confirm(t.products.deleteVariantConfirm)) return;
+    try {
+      await catalogApi.deleteVariant(user.id, variantsFor.id, variant.id);
+      toast.success(t.products.variantDeleted);
+      setVariants(await catalogApi.listVariants(user.id, variantsFor.id));
+    } catch (err) {
+      console.error('Failed to delete variant', err);
+      toast.error(t.common.loadFailed);
+    }
+  };
+
+  const set = (key: keyof typeof emptyForm, value: string | boolean) => setForm((f) => ({ ...f, [key]: value }));
+  const setVariant = (key: keyof typeof emptyVariant, value: string) => setVariantForm((f) => ({ ...f, [key]: value }));
 
   return (
     <div className="space-y-6">
@@ -163,9 +242,14 @@ export function ProductsPage() {
                 </div>
                 {product.imageUrl && <img src={product.imageUrl} alt={product.name} className="mt-3 h-28 w-full object-cover rounded-lg" />}
                 <p className="mt-3 text-lg font-bold text-gray-900">{formatCurrency(product.price)}</p>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {product.taxRate != null && <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">{product.taxRate}% tax</span>}
+                  {product.deliverable && <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">{t.products.deliverable}</span>}
+                </div>
                 {product.quantity != null && <p className="text-sm text-gray-500 mt-1">{t.products.quantity}: {product.quantity}</p>}
                 {product.description && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{product.description}</p>}
                 <div className="mt-4 flex justify-end space-x-2">
+                  <Button size="sm" variant="ghost" onClick={() => openVariants(product)}>{t.products.variants}</Button>
                   <Button size="sm" variant="ghost" onClick={() => openEdit(product)}>{t.common.edit}</Button>
                   <Button size="sm" variant="danger" onClick={() => remove(product)}>{t.common.delete}</Button>
                 </div>
@@ -187,11 +271,75 @@ export function ProductsPage() {
             <Input label={t.products.quantity} type="number" min={0} value={form.quantity} onChange={(e) => set('quantity', e.target.value)} />
             <Input label={t.products.lowStockThreshold} type="number" min={0} value={form.lowStockThreshold} onChange={(e) => set('lowStockThreshold', e.target.value)} />
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input label={t.products.taxRate} type="number" min={0} value={form.taxRate} onChange={(e) => set('taxRate', e.target.value)} />
+            <label className="flex items-end pb-2 text-sm text-gray-700">
+              <input type="checkbox" checked={form.deliverable} onChange={(e) => set('deliverable', e.target.checked)} className="rounded mr-2" />
+              <span>{t.products.deliverable}</span>
+            </label>
+          </div>
+          {form.deliverable && <Input label={t.products.deliveryContent} value={form.deliveryContent} onChange={(e) => set('deliveryContent', e.target.value)} />}
           <Input label={t.products.imageUrl} value={form.imageUrl} onChange={(e) => set('imageUrl', e.target.value)} />
           <Input label={t.products.description} value={form.description} onChange={(e) => set('description', e.target.value)} />
           <div className="flex space-x-3">
             <Button onClick={handleSave} loading={submitting} disabled={!form.name || !form.price} className="flex-1">{t.common.save}</Button>
             <Button variant="secondary" onClick={() => setShowForm(false)} className="flex-1">{t.common.cancel}</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!variantsFor} onClose={() => setVariantsFor(null)} title={`${t.products.variants} — ${variantsFor?.name || ''}`}>
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button size="sm" onClick={openVariantCreate}>{t.products.addVariant}</Button>
+          </div>
+          {variants.length === 0 ? (
+            <p className="text-center text-gray-500 py-6">{t.products.noVariants}</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-gray-400 border-b border-gray-200">
+                    <th className="pb-2 pr-4">{t.products.sku}</th>
+                    <th className="pb-2 pr-4">{t.products.name}</th>
+                    <th className="pb-2 pr-4">{t.products.priceDelta}</th>
+                    <th className="pb-2 pr-4">{t.products.quantity}</th>
+                    <th className="pb-2">{t.common.actions}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {variants.map((variant) => (
+                    <tr key={variant.id} className="border-b border-gray-100">
+                      <td className="py-2 pr-4 font-mono text-xs font-semibold text-gray-700">{variant.sku}</td>
+                      <td className="py-2 pr-4 text-gray-900">{variant.name}</td>
+                      <td className="py-2 pr-4 text-gray-600">{formatCurrency(variant.priceDelta)}</td>
+                      <td className="py-2 pr-4 text-gray-600">{variant.quantity}</td>
+                      <td className="py-2">
+                        <div className="flex space-x-2">
+                          <Button size="sm" variant="ghost" onClick={() => openVariantEdit(variant)}>{t.common.edit}</Button>
+                          <Button size="sm" variant="danger" onClick={() => removeVariant(variant)}>{t.common.delete}</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      <Modal open={showVariantForm} onClose={() => setShowVariantForm(false)} title={editingVariant ? t.common.edit : t.products.addVariant}>
+        <div className="space-y-4">
+          <Input label={t.products.sku} value={variantForm.sku} onChange={(e) => setVariant('sku', e.target.value)} />
+          <Input label={t.products.variantName} value={variantForm.name} onChange={(e) => setVariant('name', e.target.value)} />
+          <div className="grid grid-cols-2 gap-4">
+            <Input label={t.products.priceDelta} type="number" value={variantForm.priceDelta} onChange={(e) => setVariant('priceDelta', e.target.value)} />
+            <Input label={t.products.quantity} type="number" value={variantForm.quantity} onChange={(e) => setVariant('quantity', e.target.value)} />
+          </div>
+          <div className="flex space-x-3">
+            <Button onClick={saveVariant} loading={submitting} disabled={!variantForm.sku} className="flex-1">{t.common.save}</Button>
+            <Button variant="secondary" onClick={() => setShowVariantForm(false)} className="flex-1">{t.common.cancel}</Button>
           </div>
         </div>
       </Modal>

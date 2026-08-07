@@ -40,6 +40,14 @@ public class WebhookSubscription {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer maxRetries = 3;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer backoffMinutes = 5;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

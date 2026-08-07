@@ -11,4 +11,6 @@ import java.util.UUID;
 public interface StoreRepository extends JpaRepository<Store, UUID> {
 
     List<Store> findByMerchantIdOrderByCreatedAtDesc(UUID merchantId);
+
+    boolean existsBySlug(String slug);
 }

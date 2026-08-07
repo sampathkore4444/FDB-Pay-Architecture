@@ -349,6 +349,9 @@ export interface PaymentLink {
   status: PaymentLinkStatus;
   singleUse: boolean;
   reminderCount?: number;
+  autoFollowUp?: boolean;
+  followUpHours?: number;
+  nextReminderAt?: string;
   paidAt?: string;
   expiresAt?: string;
   createdAt: string;
@@ -612,6 +615,9 @@ export interface Product {
   imageUrl?: string;
   quantity?: number;
   lowStockThreshold?: number;
+  taxRate?: number;
+  deliverable?: boolean;
+  deliveryContent?: string;
   status: ActiveStatus | string;
   createdAt?: string;
 }
@@ -768,4 +774,202 @@ export interface SegmentSummary {
   segment: string;
   customerCount: number;
   totalSpend: number;
+}
+
+export interface MerchantOrderItem {
+  productId: string;
+  productName?: string;
+  quantity: number;
+  variantId?: string;
+  sku?: string;
+  unitPrice: number;
+}
+
+export interface MerchantOrder {
+  id: string;
+  merchantId: string;
+  storeId?: string;
+  customerPhone: string;
+  customerName?: string;
+  items: MerchantOrderItem[];
+  subtotal: number;
+  tax: number;
+  taxRate?: number;
+  total: number;
+  status: string;
+  refundAmount?: number;
+  paidAt?: string;
+  fulfilledAt?: string;
+  createdAt?: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  sku: string;
+  name: string;
+  priceDelta: number;
+  quantity: number;
+  createdAt?: string;
+}
+
+export interface Refund {
+  id: string;
+  orderId: string;
+  transactionId?: string;
+  customerPhone: string;
+  amount: number;
+  reason?: string;
+  status: string;
+  createdAt?: string;
+}
+
+export interface ApprovalRequest {
+  id: string;
+  type: string;
+  amount: number;
+  refId: string;
+  initiatorName?: string;
+  status: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt?: string;
+}
+
+export interface CustomerDetail {
+  phone: string;
+  name?: string;
+  totalSpent: number;
+  orderCount: number;
+  refundCount: number;
+  refundedAmount: number;
+  avgOrderValue: number;
+  lastOrderDaysAgo: number;
+  churnRisk: boolean;
+  byMonth: Record<string, number>;
+}
+
+export interface CustomerTimelineEntry {
+  type: string;
+  title: string;
+  detail?: string;
+  at?: string;
+}
+
+export interface CustomerNote {
+  id: string;
+  customerPhone: string;
+  note: string;
+  createdBy?: string;
+  createdAt?: string;
+}
+
+export interface NotificationTemplate {
+  id: string;
+  name: string;
+  channel: string;
+  subject?: string;
+  body: string;
+  triggerEvent: string;
+  enabled: boolean;
+  createdAt?: string;
+}
+
+export interface TaxInvoice {
+  id: string;
+  invoiceNo: string;
+  customerName?: string;
+  customerPhone?: string;
+  subtotal: number;
+  tax: number;
+  withholdingTax?: number;
+  total: number;
+  issueDate?: string;
+  createdAt?: string;
+}
+
+export interface TaxSummary {
+  grossRevenue: number;
+  salesTaxCollected: number;
+  withholdingTax: number;
+  netRevenue: number;
+  effectiveRatePct: number;
+  invoices: TaxInvoice[];
+}
+
+export interface FeeCalculation {
+  amount: number;
+  fee: number;
+  net: number;
+  feeSchedule: string;
+  feeRate: number;
+}
+
+export interface CashFlowMonth {
+  month: string;
+  revenue?: number;
+  projection?: number;
+}
+
+export interface CashFlowForecast {
+  months: CashFlowMonth[];
+  projectedAnnual: number;
+  averageMonthly: number;
+  growthRatePct: number;
+  seasonalAdjustment: number;
+}
+
+export interface MonitoringStatus {
+  recentTransactions: number;
+  failedTransactions: number;
+  pendingRefunds: number;
+  anomalyScore: number;
+  alerts: string[];
+}
+
+export interface BestSeller {
+  productId: string;
+  productName: string;
+  unitsSold: number;
+  revenue: number;
+}
+
+export interface RepeatCustomer {
+  customerPhone: string;
+  orderCount: number;
+  totalSpent: number;
+  repeatRate: number;
+}
+
+export interface AccountingExport {
+  accountCode: string;
+  description: string;
+  amount: number;
+}
+
+export interface ChargebackEvidence {
+  id: string;
+  chargebackId: string;
+  type: string;
+  reference?: string;
+  content?: string;
+  createdAt?: string;
+}
+
+export interface ReferralRegistration {
+  id: string;
+  programId?: string;
+  referredPhone: string;
+  status: string;
+  bonusPaid?: number;
+  createdAt?: string;
+}
+
+export interface ReferralPerformance {
+  totalRegistrations: number;
+  convertedRegistrations: number;
+  pendingRegistrations: number;
+  conversionRatePct: number;
+  totalBonusPaid: number;
+  registrations: ReferralRegistration[];
 }

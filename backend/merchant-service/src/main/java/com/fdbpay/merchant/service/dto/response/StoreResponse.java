@@ -20,5 +20,6 @@ public class StoreResponse {
     private String city;
     private String phone;
     private StoreStatus status;
+    private String slug;
     private OffsetDateTime createdAt;
 }

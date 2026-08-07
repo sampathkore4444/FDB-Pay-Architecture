@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { Link } from 'react-router-dom';
 import { useTranslation } from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
 import { merchantApi, walletApi, customerApi } from '../../services/api';
@@ -25,6 +26,7 @@ export function CustomersPage() {
   const [replyFor, setReplyFor] = useState<MerchantReview | null>(null);
   const [replyText, setReplyText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [searchPhone, setSearchPhone] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -117,6 +119,15 @@ export function CustomersPage() {
         <Card><p className="text-center text-gray-500 py-10">{t.common.loading}</p></Card>
       ) : (
         <>
+          <Card title={t.customers.searchCustomer}>
+            <div className="flex items-center space-x-2">
+              <Input placeholder={t.customers.searchPlaceholder} value={searchPhone} onChange={(e) => setSearchPhone(e.target.value)} />
+              <Link to={`/merchant/customers/${encodeURIComponent(searchPhone)}`}>
+                <Button disabled={!searchPhone.trim()}>{t.customers.viewDetail}</Button>
+              </Link>
+            </div>
+          </Card>
+
           <Card title={t.customers.insightsTitle}>
             {insights.length === 0 ? (
               <p className="text-center text-gray-500 py-6">{t.common.noData}</p>

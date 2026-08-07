@@ -59,6 +59,16 @@ public class PaymentLink {
     @Column(nullable = false)
     private Integer reminderCount = 0;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean autoFollowUp = false;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer followUpHours = 24;
+
+    private OffsetDateTime nextReminderAt;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

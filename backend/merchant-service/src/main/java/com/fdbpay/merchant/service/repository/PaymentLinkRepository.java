@@ -26,4 +26,7 @@ public interface PaymentLinkRepository extends JpaRepository<PaymentLink, UUID> 
     @Modifying
     @Query("update PaymentLink p set p.status = :status, p.paidAt = :paidAt where p.id = :id")
     int markPaid(@Param("id") UUID id, @Param("status") PaymentLinkStatus status, @Param("paidAt") java.time.OffsetDateTime paidAt);
+
+    @Query("select p from PaymentLink p where p.status = 'ACTIVE' and p.autoFollowUp = true and p.customerPhone is not null and (p.nextReminderAt is null or p.nextReminderAt <= :now)")
+    List<PaymentLink> findDueForFollowUp(@Param("now") java.time.OffsetDateTime now);
 }

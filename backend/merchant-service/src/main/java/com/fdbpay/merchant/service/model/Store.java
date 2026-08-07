@@ -40,6 +40,9 @@ public class Store {
     @Builder.Default
     private StoreStatus status = StoreStatus.ACTIVE;
 
+    @Column(length = 80)
+    private String slug;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

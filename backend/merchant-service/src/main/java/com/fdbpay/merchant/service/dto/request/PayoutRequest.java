@@ -19,4 +19,6 @@ public class PayoutRequest {
     @NotNull(message = "Amount is required")
     @Positive(message = "Amount must be positive")
     private Long amount;
+
+    private boolean requireApproval;
 }

@@ -53,6 +53,17 @@ public class Product {
     @Column(nullable = false, length = 20)
     private ActiveStatus status;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer taxRate = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean deliverable = false;
+
+    @Column(columnDefinition = "TEXT")
+    private String deliveryContent;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

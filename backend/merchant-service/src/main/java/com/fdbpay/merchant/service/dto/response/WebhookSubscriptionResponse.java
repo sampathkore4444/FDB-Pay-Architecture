@@ -17,5 +17,7 @@ public class WebhookSubscriptionResponse {
     private WebhookEvent event;
     private String url;
     private boolean enabled;
+    private Integer maxRetries;
+    private Integer backoffMinutes;
     private OffsetDateTime createdAt;
 }

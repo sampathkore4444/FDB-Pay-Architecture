@@ -1,7 +1,9 @@
 package com.fdbpay.merchant.service.controller;
 
 import com.fdbpay.merchant.service.dto.request.ProductRequest;
+import com.fdbpay.merchant.service.dto.request.ProductVariantRequest;
 import com.fdbpay.merchant.service.dto.response.ProductResponse;
+import com.fdbpay.merchant.service.dto.response.ProductVariantResponse;
 import com.fdbpay.merchant.service.service.CatalogService;
 import com.fdbpay.shared.dto.ApiResponse;
 import jakarta.validation.Valid;
@@ -45,6 +47,31 @@ public class CatalogController {
     @DeleteMapping("/{productId}")
     public ApiResponse<Void> delete(@RequestParam UUID userId, @PathVariable UUID productId) {
         catalogService.deleteProduct(accessHelper.resolveMerchantId(userId), productId);
+        return ApiResponse.success(null);
+    }
+
+    @GetMapping("/{productId}/variants")
+    public ApiResponse<List<ProductVariantResponse>> listVariants(@RequestParam UUID userId, @PathVariable UUID productId) {
+        return ApiResponse.success(catalogService.listVariants(accessHelper.resolveMerchantId(userId), productId));
+    }
+
+    @PostMapping("/{productId}/variants")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<ProductVariantResponse> addVariant(@RequestParam UUID userId, @PathVariable UUID productId,
+                                                          @Valid @RequestBody ProductVariantRequest request) {
+        return ApiResponse.success(catalogService.addVariant(accessHelper.resolveMerchantId(userId), productId, request));
+    }
+
+    @PutMapping("/{productId}/variants/{variantId}")
+    public ApiResponse<ProductVariantResponse> updateVariant(@RequestParam UUID userId, @PathVariable UUID productId,
+                                                             @PathVariable UUID variantId,
+                                                             @Valid @RequestBody ProductVariantRequest request) {
+        return ApiResponse.success(catalogService.updateVariant(accessHelper.resolveMerchantId(userId), productId, variantId, request));
+    }
+
+    @DeleteMapping("/{productId}/variants/{variantId}")
+    public ApiResponse<Void> deleteVariant(@RequestParam UUID userId, @PathVariable UUID productId, @PathVariable UUID variantId) {
+        catalogService.deleteVariant(accessHelper.resolveMerchantId(userId), productId, variantId);
         return ApiResponse.success(null);
     }
 }

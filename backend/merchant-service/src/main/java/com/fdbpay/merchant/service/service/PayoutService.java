@@ -9,10 +9,14 @@ import com.fdbpay.merchant.service.dto.response.MerchantPreferencesResponse;
 import com.fdbpay.merchant.service.dto.response.PayoutAccountResponse;
 import com.fdbpay.merchant.service.dto.response.PayoutResponse;
 import com.fdbpay.merchant.service.model.Merchant;
+import com.fdbpay.merchant.service.model.ApprovalRequest;
 import com.fdbpay.merchant.service.model.Payout;
 import com.fdbpay.merchant.service.model.PayoutAccount;
 import com.fdbpay.merchant.service.model.enums.ActiveStatus;
+import com.fdbpay.merchant.service.model.enums.ApprovalStatus;
+import com.fdbpay.merchant.service.model.enums.ApprovalType;
 import com.fdbpay.merchant.service.model.enums.PayoutStatus;
+import com.fdbpay.merchant.service.repository.ApprovalRequestRepository;
 import com.fdbpay.merchant.service.repository.MerchantRepository;
 import com.fdbpay.merchant.service.repository.PayoutAccountRepository;
 import com.fdbpay.merchant.service.repository.PayoutRepository;
@@ -39,6 +43,7 @@ public class PayoutService {
     private final PayoutRepository payoutRepository;
     private final MerchantRepository merchantRepository;
     private final WalletServiceClient walletServiceClient;
+    private final ApprovalRequestRepository approvalRequestRepository;
     private final AuditService auditService;
 
     public List<PayoutAccountResponse> listAccounts(UUID merchantId) {
@@ -96,29 +101,83 @@ public class PayoutService {
         if (walletId == null) {
             throw new BusinessException(ErrorCodes.SERVICE_UNAVAILABLE, "Unable to resolve wallet");
         }
-        boolean debited = walletServiceClient.debit(walletId, request.getAmount(),
-                "On-demand payout to " + account.getBankName() + " ending " + mask(account.getAccountNumber()), UUID.randomUUID());
+        boolean requiresApproval = request.isRequireApproval();
         Payout payout = Payout.builder()
                 .merchantId(merchantId)
                 .accountId(account.getId())
                 .accountLabel(account.getBankName() + " ending " + mask(account.getAccountNumber()))
                 .amount(request.getAmount())
-                .status(PayoutStatus.PENDING)
+                .status(requiresApproval ? PayoutStatus.PENDING : PayoutStatus.COMPLETED)
                 .reference(reference)
                 .build();
-        if (!debited) {
-            payout.setStatus(PayoutStatus.FAILED);
-            payout.setFailureReason("Wallet debit failed");
+        if (!requiresApproval) {
+            boolean debited = walletServiceClient.debit(walletId, request.getAmount(),
+                    "On-demand payout to " + account.getBankName() + " ending " + mask(account.getAccountNumber()), UUID.randomUUID());
+            if (!debited) {
+                payout.setStatus(PayoutStatus.FAILED);
+                payout.setFailureReason("Wallet debit failed");
+            } else {
+                payout.setCompletedAt(OffsetDateTime.now());
+            }
         }
         payout = payoutRepository.save(payout);
-        if (debited) {
-            payout.setStatus(PayoutStatus.COMPLETED);
-            payout.setCompletedAt(OffsetDateTime.now());
-            payout = payoutRepository.save(payout);
+        if (requiresApproval) {
+            approvalRequestRepository.save(ApprovalRequest.builder()
+                    .merchantId(merchantId)
+                    .type(ApprovalType.PAYOUT)
+                    .amount(request.getAmount())
+                    .refId(payout.getId())
+                    .status(ApprovalStatus.PENDING)
+                    .build());
         }
         auditService.log(merchantId, "OWNER", null, null, "PAYOUT", "PAYOUT", payout.getId().toString(),
                 "Requested payout of " + request.getAmount() + " MMK to " + payout.getAccountLabel() + " (" + payout.getStatus() + ")");
         return mapPayout(payout);
+    }
+
+    @Transactional
+    public PayoutResponse approvePayout(UUID merchantId, UUID payoutId, String reviewer) {
+        Payout payout = getOwnedPayout(merchantId, payoutId);
+        if (payout.getStatus() != PayoutStatus.PENDING) {
+            throw new BusinessException(ErrorCodes.INVALID_REQUEST, "Payout is not pending approval");
+        }
+        Merchant merchant = requireMerchant(merchantId);
+        UUID walletId = walletServiceClient.getWalletId(merchant.getUserId());
+        boolean debited = walletId != null && walletServiceClient.debit(walletId, payout.getAmount(),
+                "On-demand payout " + payout.getReference() + " to " + payout.getAccountLabel(), UUID.randomUUID());
+        if (debited) {
+            payout.setStatus(PayoutStatus.COMPLETED);
+            payout.setCompletedAt(OffsetDateTime.now());
+        } else {
+            payout.setStatus(PayoutStatus.FAILED);
+            payout.setFailureReason("Wallet debit failed on approval");
+        }
+        payout = payoutRepository.save(payout);
+        auditService.log(merchantId, "OWNER", null, null, "APPROVE", "PAYOUT", payoutId.toString(),
+                "Payout approved by " + reviewer);
+        return mapPayout(payout);
+    }
+
+    @Transactional
+    public PayoutResponse rejectPayout(UUID merchantId, UUID payoutId, String reviewer) {
+        Payout payout = getOwnedPayout(merchantId, payoutId);
+        if (payout.getStatus() != PayoutStatus.PENDING) {
+            throw new BusinessException(ErrorCodes.INVALID_REQUEST, "Payout is not pending approval");
+        }
+        payout.setStatus(PayoutStatus.REJECTED);
+        payout = payoutRepository.save(payout);
+        auditService.log(merchantId, "OWNER", null, null, "REJECT", "PAYOUT", payoutId.toString(),
+                "Payout rejected by " + reviewer);
+        return mapPayout(payout);
+    }
+
+    private Payout getOwnedPayout(UUID merchantId, UUID payoutId) {
+        Payout payout = payoutRepository.findById(payoutId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payout", payoutId.toString()));
+        if (!payout.getMerchantId().equals(merchantId)) {
+            throw new BusinessException(ErrorCodes.UNAUTHORIZED, "Payout does not belong to this merchant");
+        }
+        return payout;
     }
 
     public Page<PayoutResponse> listPayouts(UUID merchantId, int page, int size) {

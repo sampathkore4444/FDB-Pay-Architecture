@@ -21,6 +21,8 @@ public class WebhookDeliveryResponse {
     private String payload;
     private WebhookDeliveryStatus status;
     private Integer attempts;
+    private Integer retryCount;
+    private OffsetDateTime nextRetryAt;
     private Integer statusCode;
     private String error;
     private OffsetDateTime createdAt;

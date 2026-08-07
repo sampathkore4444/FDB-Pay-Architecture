@@ -50,6 +50,8 @@ public class PaymentLinkServiceImpl implements PaymentLinkService {
                 .status(PaymentLinkStatus.ACTIVE)
                 .singleUse(true)
                 .expiresAt(request.getExpiresAt())
+                .autoFollowUp(request.getAutoFollowUp() != null && request.getAutoFollowUp())
+                .followUpHours(request.getFollowUpHours() == null ? 24 : request.getFollowUpHours())
                 .build();
 
         link = paymentLinkRepository.save(link);
@@ -164,6 +166,9 @@ public class PaymentLinkServiceImpl implements PaymentLinkService {
                 .status(link.getStatus())
                 .singleUse(link.isSingleUse())
                 .reminderCount(link.getReminderCount())
+                .autoFollowUp(link.isAutoFollowUp())
+                .followUpHours(link.getFollowUpHours())
+                .nextReminderAt(link.getNextReminderAt())
                 .paidAt(link.getPaidAt())
                 .expiresAt(link.getExpiresAt())
                 .createdAt(link.getCreatedAt())

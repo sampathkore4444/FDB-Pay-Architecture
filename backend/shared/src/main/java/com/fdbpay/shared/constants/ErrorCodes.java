@@ -21,4 +21,5 @@ public final class ErrorCodes {
     public static final String VALIDATION_ERROR = "VALIDATION_ERROR";
     public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
     public static final String SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE";
+    public static final String INVALID_REQUEST = "INVALID_REQUEST";
 }

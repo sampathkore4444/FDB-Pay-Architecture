@@ -63,6 +63,13 @@ const icons: Record<string, string> = {
   auditLog: '📜',
   developer: '🧑‍💻',
   fraudRules: '🛡️',
+  orders: '📦',
+  refunds: '↩️',
+  approvals: '✅',
+  tax: '🧾',
+  accounting: '📊',
+  insights: '📈',
+  notificationTemplates: '🔔',
 };
 
 interface NavItem {
@@ -121,6 +128,13 @@ const navItems: NavItem[] = [
   { key: 'auditLog', route: '/merchant/audit-log', roles: ['MERCHANT'], group: 'management' },
   { key: 'developer', route: '/merchant/developer', roles: ['MERCHANT'], group: 'management' },
   { key: 'fraudRules', route: '/merchant/fraud-rules', roles: ['MERCHANT'], group: 'risk' },
+  { key: 'orders', route: '/merchant/orders', roles: ['MERCHANT'], group: 'payments' },
+  { key: 'refunds', route: '/merchant/refunds', roles: ['MERCHANT'], group: 'payments' },
+  { key: 'approvals', route: '/merchant/approvals', roles: ['MERCHANT'], group: 'management' },
+  { key: 'tax', route: '/merchant/tax', roles: ['MERCHANT'], group: 'business' },
+  { key: 'accounting', route: '/merchant/accounting', roles: ['MERCHANT'], group: 'business' },
+  { key: 'insights', route: '/merchant/insights', roles: ['MERCHANT'], group: 'overview' },
+  { key: 'notificationTemplates', route: '/merchant/notification-templates', roles: ['MERCHANT'], group: 'business' },
 
   { key: 'agent', route: '/agent', roles: ['AGENT'] },
 

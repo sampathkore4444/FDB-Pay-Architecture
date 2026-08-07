@@ -82,4 +82,16 @@ public class PayoutController {
     public ApiResponse<ContractResponse> contract(@RequestParam UUID userId) {
         return ApiResponse.success(payoutService.getContract(accessHelper.resolveMerchantId(userId)));
     }
+
+    @PostMapping("/payouts/{payoutId}/approve")
+    public ApiResponse<PayoutResponse> approve(@RequestParam UUID userId, @PathVariable UUID payoutId,
+                                               @RequestParam String reviewer) {
+        return ApiResponse.success(payoutService.approvePayout(accessHelper.resolveMerchantId(userId), payoutId, reviewer));
+    }
+
+    @PostMapping("/payouts/{payoutId}/reject")
+    public ApiResponse<PayoutResponse> reject(@RequestParam UUID userId, @PathVariable UUID payoutId,
+                                              @RequestParam String reviewer) {
+        return ApiResponse.success(payoutService.rejectPayout(accessHelper.resolveMerchantId(userId), payoutId, reviewer));
+    }
 }

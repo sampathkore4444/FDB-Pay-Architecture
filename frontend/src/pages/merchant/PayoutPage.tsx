@@ -24,6 +24,7 @@ export function PayoutPage() {
   const [showPayoutForm, setShowPayoutForm] = useState(false);
   const [payoutAccountId, setPayoutAccountId] = useState('');
   const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutRequiresApproval, setPayoutRequiresApproval] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const load = async () => {
@@ -72,13 +73,31 @@ export function PayoutPage() {
     if (!user || !payoutAccountId || !payoutAmount) return;
     setSubmitting(true);
     try {
-      await payoutApi.requestPayout(user.id, { accountId: payoutAccountId, amount: Number(payoutAmount) });
+      await payoutApi.requestPayout(user.id, { accountId: payoutAccountId, amount: Number(payoutAmount), requireApproval: payoutRequiresApproval || undefined });
       toast.success(t.payout.payoutRequested);
       setShowPayoutForm(false);
       setPayoutAmount('');
+      setPayoutRequiresApproval(false);
       await load();
     } catch (err) {
       console.error('Failed to request payout', err);
+      toast.error(t.common.loadFailed);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const review = async (payout: Payout, action: 'approve' | 'reject') => {
+    if (!user) return;
+    if (!window.confirm(`${t.payout[action]} ${payout.amount.toLocaleString()} MMK?`)) return;
+    setSubmitting(true);
+    try {
+      if (action === 'approve') await payoutApi.approvePayout(user.id, payout.id);
+      else await payoutApi.rejectPayout(user.id, payout.id);
+      toast.success(action === 'approve' ? t.payout.payoutApproved : t.payout.payoutRejected);
+      await load();
+    } catch (err) {
+      console.error(`Failed to ${action} payout`, err);
       toast.error(t.common.loadFailed);
     } finally {
       setSubmitting(false);
@@ -193,10 +212,18 @@ export function PayoutPage() {
                         <td className="py-2 pr-4 text-gray-900">{p.accountLabel}</td>
                         <td className="py-2 pr-4 text-gray-900">{p.amount.toLocaleString()} MMK</td>
                         <td className="py-2 pr-4">
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${p.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : p.status === 'FAILED' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{p.status}</span>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${p.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : p.status === 'FAILED' || p.status === 'REJECTED' ? 'bg-red-100 text-red-700' : p.status === 'APPROVED' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>{p.status}</span>
                         </td>
                         <td className="py-2 pr-4 font-mono text-xs text-gray-500">{p.reference ?? '—'}</td>
-                        <td className="py-2 text-gray-500">{p.completedAt ? new Date(p.completedAt).toLocaleString() : '—'}</td>
+                        <td className="py-2 pr-4 text-gray-500">{p.completedAt ? new Date(p.completedAt).toLocaleString() : '—'}</td>
+                        <td className="py-2">
+                          {p.status === 'PENDING' && (
+                            <div className="flex space-x-2">
+                              <Button size="sm" onClick={() => review(p, 'approve')}>{t.payout.approve}</Button>
+                              <Button size="sm" variant="danger" onClick={() => review(p, 'reject')}>{t.payout.reject}</Button>
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -236,6 +263,10 @@ export function PayoutPage() {
             </select>
           </div>
           <Input label={t.payout.amount} type="number" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} />
+          <label className="flex items-center space-x-2 text-sm text-gray-700">
+            <input type="checkbox" checked={payoutRequiresApproval} onChange={(e) => setPayoutRequiresApproval(e.target.checked)} className="rounded" />
+            <span>{t.payout.requireApproval}</span>
+          </label>
           <p className="text-xs text-gray-500">{t.payout.availableBalance}: {balance?.toLocaleString() ?? '—'} MMK</p>
           <div className="flex space-x-3">
             <Button onClick={handlePayout} loading={submitting} disabled={!payoutAccountId || !payoutAmount} className="flex-1">{t.payout.confirmPayout}</Button>

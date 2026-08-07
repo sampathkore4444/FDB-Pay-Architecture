@@ -28,4 +28,10 @@ public class ProductRequest {
     private Long quantity;
 
     private Long lowStockThreshold;
+
+    private Integer taxRate;
+
+    private Boolean deliverable;
+
+    private String deliveryContent;
 }

@@ -47,6 +47,7 @@ public class StoreServiceImpl implements StoreService {
                 .address(request.getAddress())
                 .city(request.getCity())
                 .phone(request.getPhone())
+                .slug(generateSlug(merchantId, request.getName()))
                 .status(StoreStatus.ACTIVE)
                 .build();
         store = storeRepository.save(store);
@@ -80,7 +81,24 @@ public class StoreServiceImpl implements StoreService {
                 .city(store.getCity())
                 .phone(store.getPhone())
                 .status(store.getStatus())
+                .slug(store.getSlug())
                 .createdAt(store.getCreatedAt())
                 .build();
+    }
+
+    private String generateSlug(UUID merchantId, String name) {
+        String base = (name == null ? "store" : name.trim().toLowerCase()
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-+|-+$", ""));
+        if (base.isBlank()) {
+            base = "store";
+        }
+        String slug = base;
+        String suffix = merchantId.toString().substring(0, 6);
+        int attempt = 0;
+        while (storeRepository.existsBySlug(slug)) {
+            slug = base + "-" + suffix + "-" + (++attempt);
+        }
+        return slug;
     }
 }

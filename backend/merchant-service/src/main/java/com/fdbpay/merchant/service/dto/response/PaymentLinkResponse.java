@@ -23,6 +23,9 @@ public class PaymentLinkResponse {
     private PaymentLinkStatus status;
     private boolean singleUse;
     private Integer reminderCount;
+    private boolean autoFollowUp;
+    private Integer followUpHours;
+    private OffsetDateTime nextReminderAt;
     private OffsetDateTime paidAt;
     private OffsetDateTime expiresAt;
     private OffsetDateTime createdAt;

@@ -22,6 +22,9 @@ public class ProductResponse {
     private String imageUrl;
     private Long quantity;
     private Long lowStockThreshold;
+    private Integer taxRate;
+    private boolean deliverable;
+    private String deliveryContent;
     private ActiveStatus status;
     private OffsetDateTime createdAt;
 }

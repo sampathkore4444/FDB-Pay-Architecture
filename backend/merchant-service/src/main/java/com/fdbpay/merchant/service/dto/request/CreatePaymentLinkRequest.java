@@ -24,4 +24,8 @@ public class CreatePaymentLinkRequest {
     private String customerName;
 
     private OffsetDateTime expiresAt;
+
+    private Boolean autoFollowUp;
+
+    private Integer followUpHours;
 }

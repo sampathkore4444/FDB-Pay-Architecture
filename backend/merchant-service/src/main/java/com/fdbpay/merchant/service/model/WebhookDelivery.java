@@ -55,5 +55,11 @@ public class WebhookDelivery {
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer retryCount = 0;
+
+    private OffsetDateTime nextRetryAt;
+
     private OffsetDateTime deliveredAt;
 }

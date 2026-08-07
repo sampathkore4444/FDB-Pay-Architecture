@@ -22,6 +22,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
@@ -63,6 +64,8 @@ public class WebhookService {
                 .url(request.getUrl())
                 .secret("whsec_" + UUID.randomUUID().toString().replace("-", "").substring(0, 24))
                 .enabled(true)
+                .maxRetries(request.getMaxRetries() == null ? 3 : request.getMaxRetries())
+                .backoffMinutes(request.getBackoffMinutes() == null ? 5 : request.getBackoffMinutes())
                 .build();
         subscription = subscriptionRepository.save(subscription);
         auditService.log(merchantId, "OWNER", null, null, "CREATE", "WEBHOOK", subscription.getId().toString(),
@@ -117,6 +120,7 @@ public class WebhookService {
         int attempts = 0;
         Integer statusCode = null;
         String error = null;
+        boolean success = false;
         try {
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
@@ -127,6 +131,7 @@ public class WebhookService {
             ResponseEntity<String> response = restTemplate.exchange(subscription.getUrl(), HttpMethod.POST, entity, String.class);
             attempts = 1;
             statusCode = response.getStatusCode().value();
+            success = statusCode < 300;
         } catch (Exception e) {
             attempts = 1;
             error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage().substring(0, Math.min(200, e.getMessage().length()));
@@ -138,14 +143,80 @@ public class WebhookService {
                 .event(subscription.getEvent())
                 .url(subscription.getUrl())
                 .payload(payload)
-                .status(statusCode != null && statusCode < 300 ? WebhookDeliveryStatus.SUCCESS : WebhookDeliveryStatus.FAILED)
+                .status(success ? WebhookDeliveryStatus.SUCCESS : WebhookDeliveryStatus.FAILED)
                 .attempts(attempts)
+                .retryCount(0)
                 .statusCode(statusCode)
                 .error(error)
                 .deliveredAt(OffsetDateTime.now())
                 .build();
+        if (!success) {
+            scheduleRetry(delivery, subscription);
+        }
         delivery = deliveryRepository.save(delivery);
         return mapDelivery(delivery);
+    }
+
+    private void scheduleRetry(WebhookDelivery delivery, WebhookSubscription subscription) {
+        int maxRetries = subscription.getMaxRetries() == null ? 3 : subscription.getMaxRetries();
+        if (maxRetries <= 0) {
+            return;
+        }
+        int backoff = subscription.getBackoffMinutes() == null ? 5 : subscription.getBackoffMinutes();
+        delivery.setRetryCount(1);
+        delivery.setNextRetryAt(OffsetDateTime.now().plusMinutes(backoff));
+        delivery.setStatus(WebhookDeliveryStatus.FAILED);
+    }
+
+    @Scheduled(cron = "0 */2 * * * *")
+    @Transactional
+    public void processRetries() {
+        List<WebhookDelivery> due = deliveryRepository.findByStatusAndNextRetryAtLessThanEqual(WebhookDeliveryStatus.FAILED, OffsetDateTime.now());
+        for (WebhookDelivery delivery : due) {
+            WebhookSubscription subscription = delivery.getSubscriptionId() == null ? null
+                    : subscriptionRepository.findById(delivery.getSubscriptionId()).orElse(null);
+            if (subscription == null || !subscription.isEnabled()) {
+                delivery.setStatus(WebhookDeliveryStatus.FAILED);
+                delivery.setNextRetryAt(null);
+                deliveryRepository.save(delivery);
+                continue;
+            }
+            int maxRetries = subscription.getMaxRetries() == null ? 3 : subscription.getMaxRetries();
+            int current = delivery.getRetryCount() == null ? 0 : delivery.getRetryCount();
+            boolean success = attemptDelivery(delivery, subscription);
+            if (success) {
+                delivery.setStatus(WebhookDeliveryStatus.SUCCESS);
+                delivery.setNextRetryAt(null);
+                delivery.setError(null);
+                delivery.setDeliveredAt(OffsetDateTime.now());
+            } else if (current >= maxRetries) {
+                delivery.setNextRetryAt(null);
+            } else {
+                int backoff = subscription.getBackoffMinutes() == null ? 5 : subscription.getBackoffMinutes();
+                delivery.setNextRetryAt(OffsetDateTime.now().plusMinutes(backoff * (long) current));
+                delivery.setRetryCount(current + 1);
+            }
+            delivery.setAttempts((delivery.getAttempts() == null ? 0 : delivery.getAttempts()) + 1);
+            deliveryRepository.save(delivery);
+        }
+    }
+
+    private boolean attemptDelivery(WebhookDelivery delivery, WebhookSubscription subscription) {
+        try {
+            RestTemplate restTemplate = new RestTemplate();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set(HttpHeaders.USER_AGENT, "fdbpay-webhooks/1.0");
+            headers.set("X-Webhook-Signature", sign(delivery.getPayload(), subscription.getSecret()));
+            HttpEntity<String> entity = new HttpEntity<>(delivery.getPayload(), headers);
+            ResponseEntity<String> response = restTemplate.exchange(delivery.getUrl(), HttpMethod.POST, entity, String.class);
+            delivery.setStatusCode(response.getStatusCode().value());
+            return response.getStatusCode().value() < 300;
+        } catch (Exception e) {
+            delivery.setError(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage().substring(0, Math.min(200, e.getMessage().length())));
+            log.warn("Webhook retry failed to {}: {}", delivery.getUrl(), e.getMessage());
+            return false;
+        }
     }
 
     private String sign(String payload, String secret) {
@@ -190,6 +261,8 @@ public class WebhookService {
                 .event(subscription.getEvent())
                 .url(subscription.getUrl())
                 .enabled(subscription.isEnabled())
+                .maxRetries(subscription.getMaxRetries())
+                .backoffMinutes(subscription.getBackoffMinutes())
                 .createdAt(subscription.getCreatedAt())
                 .build();
     }
@@ -203,6 +276,8 @@ public class WebhookService {
                 .payload(delivery.getPayload())
                 .status(delivery.getStatus())
                 .attempts(delivery.getAttempts())
+                .retryCount(delivery.getRetryCount())
+                .nextRetryAt(delivery.getNextRetryAt())
                 .statusCode(delivery.getStatusCode())
                 .error(delivery.getError())
                 .createdAt(delivery.getCreatedAt())

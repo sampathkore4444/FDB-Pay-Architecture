@@ -16,4 +16,8 @@ public class WebhookSubscriptionRequest {
 
     @NotBlank(message = "URL is required")
     private String url;
+
+    private Integer maxRetries;
+
+    private Integer backoffMinutes;
 }

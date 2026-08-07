@@ -9,7 +9,7 @@ import { Input } from '../../components/ui/Input';
 import { formatCurrency, formatDate, copyToClipboard } from '../../utils';
 import type { PaymentLink } from '../../types';
 
-const emptyForm = { amount: '', description: '', customerPhone: '', customerName: '' };
+const emptyForm = { amount: '', description: '', customerPhone: '', customerName: '', autoFollowUp: false, followUpHours: '' };
 
 export function MerchantPaymentLinksPage() {
   const { t } = useTranslation();
@@ -46,6 +46,8 @@ export function MerchantPaymentLinksPage() {
         description: form.description.trim() || undefined,
         customerPhone: form.customerPhone.trim() || undefined,
         customerName: form.customerName.trim() || undefined,
+        autoFollowUp: form.autoFollowUp || undefined,
+        followUpHours: form.followUpHours ? Number(form.followUpHours) : undefined,
       });
       toast.success(t.paymentLinks.created);
       setForm(emptyForm);
@@ -89,7 +91,7 @@ export function MerchantPaymentLinksPage() {
     }
   };
 
-  const set = (key: keyof typeof emptyForm, value: string) => setForm((f) => ({ ...f, [key]: value }));
+  const set = (key: keyof typeof emptyForm, value: string | boolean) => setForm((f) => ({ ...f, [key]: value }));
 
   const statusBadge = (s: PaymentLink['status']) => {
     const map: Record<string, string> = {
@@ -117,6 +119,15 @@ export function MerchantPaymentLinksPage() {
             <Input label={t.paymentLinks.description} value={form.description} onChange={(e) => set('description', e.target.value)} />
             <Input label={t.paymentLinks.customerPhone} value={form.customerPhone} onChange={(e) => set('customerPhone', e.target.value)} />
             <Input label={t.paymentLinks.customerName} value={form.customerName} onChange={(e) => set('customerName', e.target.value)} />
+          </div>
+          <div className="mt-4 flex items-center space-x-4">
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
+              <input type="checkbox" checked={form.autoFollowUp} onChange={(e) => set('autoFollowUp', e.target.checked)} className="rounded" />
+              <span>{t.paymentLinks.autoFollowUp}</span>
+            </label>
+            {form.autoFollowUp && (
+              <Input type="number" min={1} placeholder={t.paymentLinks.followUpHoursPlaceholder} label={t.paymentLinks.followUpHours} value={form.followUpHours} onChange={(e) => set('followUpHours', e.target.value)} />
+            )}
           </div>
           <div className="mt-4 flex justify-end">
             <Button onClick={handleCreate} loading={submitting} disabled={!form.amount}>

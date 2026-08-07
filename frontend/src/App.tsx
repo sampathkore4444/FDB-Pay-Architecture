@@ -39,6 +39,14 @@ import { DeveloperPage } from './pages/merchant/DeveloperPage';
 import { FraudRulesPage } from './pages/merchant/FraudRulesPage';
 import { StoreComparePage } from './pages/merchant/StoreComparePage';
 import { MerchantSettingsPage } from './pages/merchant/MerchantSettingsPage';
+import { OrdersPage } from './pages/merchant/OrdersPage';
+import { RefundsPage } from './pages/merchant/RefundsPage';
+import { ApprovalsPage } from './pages/merchant/ApprovalsPage';
+import { CustomerDetailPage } from './pages/merchant/CustomerDetailPage';
+import { TaxPage } from './pages/merchant/TaxPage';
+import { AccountingPage } from './pages/merchant/AccountingPage';
+import { InsightsPage } from './pages/merchant/InsightsPage';
+import { NotificationTemplatesPage } from './pages/merchant/NotificationTemplatesPage';
 import { AgentPage } from './pages/agent/AgentPage';
 import { AdminPage } from './pages/admin/AdminPage';
 import { KycReviewPage } from './pages/admin/KycReviewPage';
@@ -121,6 +129,14 @@ function App() {
             <Route path="/merchant/loyalty" element={<RoleGuard allowedRoles={MERCHANT}><LoyaltyPage /></RoleGuard>} />
             <Route path="/merchant/referral" element={<RoleGuard allowedRoles={MERCHANT}><ReferralPage /></RoleGuard>} />
             <Route path="/merchant/customers" element={<RoleGuard allowedRoles={MERCHANT}><CustomersPage /></RoleGuard>} />
+            <Route path="/merchant/customers/:phone" element={<RoleGuard allowedRoles={MERCHANT}><CustomerDetailPage /></RoleGuard>} />
+            <Route path="/merchant/orders" element={<RoleGuard allowedRoles={MERCHANT}><OrdersPage /></RoleGuard>} />
+            <Route path="/merchant/refunds" element={<RoleGuard allowedRoles={MERCHANT}><RefundsPage /></RoleGuard>} />
+            <Route path="/merchant/approvals" element={<RoleGuard allowedRoles={MERCHANT}><ApprovalsPage /></RoleGuard>} />
+            <Route path="/merchant/tax" element={<RoleGuard allowedRoles={MERCHANT}><TaxPage /></RoleGuard>} />
+            <Route path="/merchant/accounting" element={<RoleGuard allowedRoles={MERCHANT}><AccountingPage /></RoleGuard>} />
+            <Route path="/merchant/insights" element={<RoleGuard allowedRoles={MERCHANT}><InsightsPage /></RoleGuard>} />
+            <Route path="/merchant/notification-templates" element={<RoleGuard allowedRoles={MERCHANT}><NotificationTemplatesPage /></RoleGuard>} />
             <Route path="/merchant/audit-log" element={<RoleGuard allowedRoles={MERCHANT}><MerchantAuditLogPage /></RoleGuard>} />
             <Route path="/merchant/developer" element={<RoleGuard allowedRoles={MERCHANT}><DeveloperPage /></RoleGuard>} />
             <Route path="/merchant/fraud-rules" element={<RoleGuard allowedRoles={MERCHANT}><FraudRulesPage /></RoleGuard>} />
